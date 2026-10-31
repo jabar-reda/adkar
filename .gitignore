@@ -1,0 +1,13 @@
+# ملفات نظام التشغيل
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ملفات المحررات
+.vscode/
+.idea/
+*.swp
+
+# ملفات مؤقتة
+*.tmp
+*.log
