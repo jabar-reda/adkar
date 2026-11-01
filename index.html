@@ -26,6 +26,7 @@
       var hour = new Date().getHours();
       var autoPeriod = hour >= 4 && hour < 15 ? "morning" : "evening";
       var theme = settings.theme;
+      // الثيم التلقائي والثيم حسب الوقت يبدآن من الساعة، ثم يتبع "auto" القسم النشط بعد التحميل.
       var period = theme === "morning" || theme === "evening" ? theme : autoPeriod;
       var sizes = ["small", "medium", "large", "xlarge"];
       var fontSize = sizes.indexOf(settings.fontSize) >= 0 ? settings.fontSize : "medium";
@@ -272,6 +273,24 @@
       transition: width 0.35s ease;
     }
 
+    .progress-track.is-celebrating {
+      animation: progress-celebrate 1.1s ease;
+    }
+
+    @keyframes progress-celebrate {
+      0% {
+        box-shadow: 0 0 0 0 var(--accent-soft);
+      }
+
+      45% {
+        box-shadow: 0 0 0 8px var(--accent-soft);
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 transparent;
+      }
+    }
+
     /* ===== 6. قائمة الأذكار ===== */
     .dhikr-list {
       position: relative;
@@ -405,6 +424,7 @@
     /* ===== 7. أزرار العدّ ===== */
     .dhikr-actions {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       gap: 0.5rem;
       margin-top: 0.9rem;
@@ -463,88 +483,222 @@
       display: none;
     }
 
-    /* ===== 8. التذييل والسجل ===== */
+    .counter-open {
+      padding: 0.45rem 0.85rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: transparent;
+      color: var(--muted);
+      font-family: var(--font-ui);
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: border-color 0.2s ease, color 0.2s ease;
+    }
+
+    .counter-open:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* ===== 8. التذييل والتقدم ===== */
     .site-footer {
       margin-top: 3rem;
       padding-top: 1.5rem;
       border-top: 1px solid var(--line);
     }
 
-    .history-head {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.5rem 1rem;
-      margin-bottom: 0.75rem;
-    }
-
-    .history-title {
-      margin: 0;
-      color: var(--muted);
-      font-size: 0.8rem;
-    }
-
-    .legend {
-      display: flex;
-      align-items: center;
-      gap: 0.35rem;
-      margin: 0;
-      color: var(--muted);
-      font-size: 0.72rem;
-    }
-
-    .legend-dot {
-      width: 7px;
-      height: 12px;
-      margin-inline-start: 0.4rem;
-      border-radius: 2px;
-      background: var(--accent);
-    }
-
-    .legend-dot:first-child {
-      margin-inline-start: 0;
-    }
-
-    .days {
-      display: flex;
-      gap: 0.6rem;
-    }
-
-    .day {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0.35rem;
-    }
-
-    .day-num {
-      color: var(--muted);
-      font-size: 0.7rem;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .day.is-today .day-num {
-      color: var(--accent);
+    .insights-title {
+      margin: 0 0 0.75rem;
+      color: var(--ink-soft);
+      font-family: var(--font-ui);
+      font-size: 0.95rem;
       font-weight: 600;
     }
 
-    .day-bars {
-      display: flex;
-      gap: 3px;
+    .streak-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.6rem;
     }
 
-    .bar {
-      width: 7px;
-      height: 18px;
+    .streak-card {
+      padding: 0.75rem 0.9rem;
       border: 1px solid var(--line);
-      border-radius: 3px;
-      background: transparent;
+      border-radius: var(--radius);
+      background: var(--surface);
     }
 
-    .bar.is-on {
+    .streak-value {
+      display: block;
+      color: var(--accent);
+      font-size: 1.55rem;
+      font-weight: 700;
+      line-height: 1.2;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .streak-label {
+      display: block;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .streak-note {
+      display: block;
+      margin-top: 0.2rem;
+      color: var(--muted);
+      font-size: 0.7rem;
+      line-height: 1.6;
+    }
+
+    .weekly-summary {
+      margin: 0.75rem 0 0;
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.8;
+    }
+
+    .calendar {
+      margin-top: 1rem;
+      padding: 0.9rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+
+    .calendar-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.6rem;
+    }
+
+    .calendar-month {
+      margin: 0;
+      color: var(--ink-soft);
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .calendar-nav {
+      padding: 0.25rem 0.6rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: transparent;
+      color: var(--muted);
+      font-family: var(--font-ui);
+      font-size: 0.75rem;
+      cursor: pointer;
+    }
+
+    .calendar-nav:hover:not(:disabled) {
       border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .calendar-nav:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+
+    .calendar-weekdays,
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 0.25rem;
+    }
+
+    .calendar-weekdays {
+      margin-bottom: 0.25rem;
+      color: var(--muted);
+      font-size: 0.62rem;
+      text-align: center;
+    }
+
+    .calendar-day {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.15rem;
+      min-height: 2.35rem;
+      padding: 0.2rem 0;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--ink-soft);
+      font-family: var(--font-ui);
+      font-size: 0.75rem;
+      line-height: 1.2;
+      font-variant-numeric: tabular-nums;
+      cursor: pointer;
+    }
+
+    .calendar-day:hover:not(:disabled) {
+      background: var(--accent-soft);
+    }
+
+    .calendar-day.is-empty {
+      visibility: hidden;
+    }
+
+    .calendar-day.is-future {
+      color: var(--muted);
+      opacity: 0.45;
+      cursor: default;
+    }
+
+    .calendar-day.is-today {
+      box-shadow: inset 0 0 0 1px var(--accent);
+    }
+
+    .calendar-day.is-today.is-complete {
+      box-shadow: inset 0 0 0 1px var(--accent-ink);
+    }
+
+    .calendar-day.is-selected {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+
+    .calendar-day.is-selected.is-complete {
+      outline-color: var(--accent-ink);
+    }
+
+    .calendar-day.is-complete {
       background: var(--accent);
+      color: var(--accent-ink);
+    }
+
+    .calendar-day.is-partial {
+      background: var(--accent-soft);
+    }
+
+    .calendar-dots {
+      display: flex;
+      gap: 2px;
+      height: 4px;
+    }
+
+    .calendar-dot {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: 0.3;
+    }
+
+    .calendar-dot.is-on {
+      opacity: 1;
+    }
+
+    .calendar-detail {
+      min-height: 1.2rem;
+      margin: 0.6rem 0 0;
+      color: var(--muted);
+      font-size: 0.75rem;
+      line-height: 1.7;
     }
 
     .disclaimer {
@@ -652,6 +806,19 @@
       background: var(--surface);
     }
 
+    .segmented--themes {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.2rem;
+      border-radius: 14px;
+    }
+
+    @media (min-width: 34rem) {
+      .segmented--themes {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+    }
+
     .segment {
       padding: 0.35rem 0.7rem;
       border: 0;
@@ -708,6 +875,17 @@
       color: var(--bg);
     }
 
+    .ghost-button.is-confirming {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: var(--accent-ink);
+    }
+
+    .ghost-button:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+
     .setting-note {
       margin: 0.5rem 0 0;
       color: var(--muted);
@@ -717,6 +895,18 @@
 
     .setting-note.is-error {
       color: var(--danger);
+    }
+
+    .backup-reminder {
+      margin: 0.25rem 0 0;
+      color: var(--muted);
+      font-size: 0.78rem;
+      line-height: 1.8;
+    }
+
+    .backup-reminder.is-warning {
+      color: var(--accent);
+      font-weight: 500;
     }
 
     .import-confirm {
@@ -782,7 +972,131 @@
       color: var(--ink);
     }
 
-    /* ===== 10. أدوات مساعدة ===== */
+    /* ===== 10. نافذة العدّاد ===== */
+    body.is-dialog-open {
+      overflow: hidden;
+    }
+
+    .counter-dialog {
+      width: min(100% - 2rem, 26rem);
+      max-height: calc(100vh - 2rem);
+      padding: 1.15rem;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--surface);
+      color: var(--ink);
+      overflow-y: auto;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+    }
+
+    .counter-dialog::backdrop {
+      background: rgba(8, 12, 18, 0.65);
+      backdrop-filter: blur(3px);
+    }
+
+    .counter-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .counter-head h2 {
+      margin: 0;
+      font-family: var(--font-dua);
+      font-size: 1.3rem;
+      line-height: 1.4;
+    }
+
+    .counter-close {
+      flex-shrink: 0;
+      padding: 0.3rem 0.7rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: transparent;
+      color: var(--muted);
+      font-family: var(--font-ui);
+      font-size: 0.75rem;
+      cursor: pointer;
+    }
+
+    .counter-close:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .counter-text {
+      max-height: 34vh;
+      margin-top: 0.75rem;
+      padding-inline-end: 0.25rem;
+      overflow-y: auto;
+    }
+
+    .counter-text .ayah {
+      font-size: calc(1.25rem * var(--dua-scale));
+    }
+
+    .counter-text .dhikr-text {
+      font-size: calc(1.15rem * var(--dua-scale));
+    }
+
+    .counter-count {
+      margin: 1rem 0 0.35rem;
+      text-align: center;
+      font-size: 1.05rem;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .counter-track {
+      height: 6px;
+      border-radius: 999px;
+      background: var(--line);
+      overflow: hidden;
+    }
+
+    .counter-fill {
+      width: 0%;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--accent);
+      transition: width 0.25s ease;
+    }
+
+    .counter-button {
+      display: block;
+      width: 100%;
+      min-height: 6rem;
+      margin-top: 1rem;
+      padding: 1rem;
+      border: 0;
+      border-radius: 16px;
+      background: var(--accent);
+      color: var(--accent-ink);
+      font-family: var(--font-ui);
+      font-size: 1.7rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.12s ease, opacity 0.2s ease;
+    }
+
+    .counter-button:active:not(:disabled) {
+      transform: scale(0.98);
+    }
+
+    .counter-button:disabled {
+      background: var(--accent-soft);
+      color: var(--accent);
+      cursor: default;
+    }
+
+    .counter-actions {
+      display: flex;
+      justify-content: center;
+      margin-top: 0.75rem;
+    }
+
+    /* ===== 11. أدوات مساعدة ===== */
     .sr-only {
       position: absolute;
       width: 1px;
@@ -834,6 +1148,15 @@
       .pill {
         min-width: 5.75rem;
       }
+
+      .calendar {
+        padding: 0.7rem;
+      }
+
+      .calendar-day {
+        min-height: 2.1rem;
+        font-size: 0.7rem;
+      }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -853,8 +1176,9 @@
       .dhikr-actions,
       .settings,
       .undo-bar,
+      .counter-dialog,
       .site-footer .reset,
-      .history {
+      .insights {
         display: none !important;
       }
 
@@ -954,16 +1278,46 @@
     </main>
 
     <footer class="site-footer">
-      <div class="history">
-        <div class="history-head">
-          <p class="history-title">آخر سبعة أيام</p>
-          <p class="legend">
-            <span class="legend-dot" aria-hidden="true"></span> الصباح
-            <span class="legend-dot" aria-hidden="true"></span> المساء
-          </p>
+      <section class="insights" aria-labelledby="insights-title">
+        <h2 class="insights-title" id="insights-title">التقدم</h2>
+
+        <div class="streak-cards">
+          <div class="streak-card">
+            <span class="streak-value" id="streak-current">٠</span>
+            <span class="streak-label">السلسلة الحالية</span>
+            <span class="streak-note" id="streak-note"></span>
+          </div>
+          <div class="streak-card">
+            <span class="streak-value" id="streak-best">٠</span>
+            <span class="streak-label">أفضل سلسلة</span>
+          </div>
         </div>
-        <div class="days" id="history"></div>
-      </div>
+
+        <p class="weekly-summary" id="weekly-summary"></p>
+
+        <div class="calendar">
+          <div class="calendar-head">
+            <button type="button" class="calendar-nav" id="calendar-prev" aria-label="الشهر السابق">
+              السابق
+            </button>
+            <p class="calendar-month" id="calendar-month"></p>
+            <button type="button" class="calendar-nav" id="calendar-next" aria-label="الشهر التالي">
+              التالي
+            </button>
+          </div>
+          <div class="calendar-weekdays" aria-hidden="true">
+            <span>أحد</span>
+            <span>إثن</span>
+            <span>ثلث</span>
+            <span>أرب</span>
+            <span>خم</span>
+            <span>جمع</span>
+            <span>سبت</span>
+          </div>
+          <div class="calendar-grid" id="calendar-grid"></div>
+          <p class="calendar-detail" id="calendar-detail"></p>
+        </div>
+      </section>
 
       <section class="settings" aria-labelledby="settings-title">
         <h2 class="settings-title" id="settings-title">الإعدادات</h2>
@@ -980,8 +1334,9 @@
 
         <div class="setting-row">
           <span class="setting-label" id="theme-label">الألوان</span>
-          <div class="segmented" role="group" aria-labelledby="theme-label">
-            <button type="button" class="segment" data-theme="auto" aria-pressed="true">تلقائي</button>
+          <div class="segmented segmented--themes" role="group" aria-labelledby="theme-label">
+            <button type="button" class="segment" data-theme="auto" aria-pressed="true">تلقائي (القسم)</button>
+            <button type="button" class="segment" data-theme="time" aria-pressed="false">حسب الوقت</button>
             <button type="button" class="segment" data-theme="morning" aria-pressed="false">صباح</button>
             <button type="button" class="segment" data-theme="evening" aria-pressed="false">مساء</button>
           </div>
@@ -992,10 +1347,12 @@
           <div class="backup-actions">
             <button type="button" class="ghost-button" id="export-backup">تصدير نسخة</button>
             <button type="button" class="ghost-button" id="import-backup">استيراد نسخة</button>
+            <button type="button" class="ghost-button" id="export-csv">تصدير CSV</button>
             <input type="file" id="import-file" accept="application/json,.json" hidden />
           </div>
         </div>
 
+        <p class="backup-reminder" id="backup-reminder"></p>
         <p class="setting-note" id="backup-status" role="status"></p>
 
         <div class="import-confirm" id="import-confirm" hidden>
@@ -1016,6 +1373,22 @@
     </footer>
   </div>
 
+  <dialog class="counter-dialog" id="counter-dialog" aria-labelledby="counter-title">
+    <div class="counter-head">
+      <h2 id="counter-title"></h2>
+      <button type="button" class="counter-close" id="counter-close">إغلاق</button>
+    </div>
+    <div class="counter-text" id="counter-text"></div>
+    <p class="counter-count" id="counter-count"></p>
+    <div class="counter-track" aria-hidden="true">
+      <div class="counter-fill" id="counter-fill"></div>
+    </div>
+    <button type="button" class="counter-button" id="counter-button">عدّ</button>
+    <div class="counter-actions">
+      <button type="button" class="ghost-button" id="counter-reset">إعادة العدّ</button>
+    </div>
+  </dialog>
+
   <div class="undo-bar" id="undo-bar" hidden>
     <span id="undo-text"></span>
     <button type="button" id="undo-button" aria-label="تراجع عن آخر إجراء">تراجع</button>
@@ -1031,12 +1404,12 @@
       const STORAGE_KEY = "douaa-tracker.v1";
       const SETTINGS_KEY = "douaa-tracker.settings.v1";
       const KEEP_DAYS = 60;
-      const HISTORY_DAYS = 7;
       const MAX_BACKUP_BYTES = 2 * 1024 * 1024;
+      const BACKUP_REMINDER_DAYS = 14;
       const ARABIC_DIGITS = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
       const FONT_SIZES = ["small", "medium", "large", "xlarge"];
-      const THEMES = ["auto", "morning", "evening"];
-      const DEFAULT_SETTINGS = { fontSize: "medium", theme: "auto" };
+      const THEMES = ["auto", "time", "morning", "evening"];
+      const DEFAULT_SETTINGS = { fontSize: "medium", theme: "auto", lastExportAt: null };
       const PERIOD_WINDOWS = {
         morning: { start: 4, end: 15 },
         evening: { start: 15, end: 4 },
@@ -1267,17 +1640,80 @@
 
       const emptyDay = () => ({ morning: {}, evening: {} });
 
+      const addDays = (date, amount) => {
+        const next = new Date(date);
+        next.setDate(next.getDate() + amount);
+        return next;
+      };
+
+      const addMonths = (date, amount) =>
+        new Date(date.getFullYear(), date.getMonth() + amount, 1);
+
+      const startOfMonth = (date) => new Date(date.getFullYear(), date.getMonth(), 1);
+
+      const parseDateKey = (key) => {
+        const [year, month, day] = key.split("-").map(Number);
+        return new Date(year, month - 1, day);
+      };
+
+      const dayDifference = (fromKey, toKey) => {
+        const from = parseDateKey(fromKey);
+        const to = parseDateKey(toKey);
+        return Math.round((to - from) / 86400000);
+      };
+
+      function isDayComplete(key) {
+        return isSectionComplete("morning", key) && isSectionComplete("evening", key);
+      }
+
       /* ===== الحالة والتخزين ===== */
+      function sanitizeDayRecord(source) {
+        const day = emptyDay();
+        if (!source || typeof source !== "object" || Array.isArray(source)) return day;
+        ["morning", "evening"].forEach((period) => {
+          const record = source[period];
+          if (!record || typeof record !== "object" || Array.isArray(record)) return;
+          SECTIONS[period].items.forEach((item, index) => {
+            const entry = record[itemKey(period, index)];
+            if (!entry || typeof entry !== "object" || Array.isArray(entry)) return;
+            if (item.count === 0) {
+              day[period][itemKey(period, index)] = { count: 0, done: Boolean(entry.done) };
+              return;
+            }
+            const count = Math.max(0, Math.min(item.count, Math.floor(Number(entry.count) || 0)));
+            day[period][itemKey(period, index)] = { count, done: count >= item.count };
+          });
+        });
+        return day;
+      }
+
+      function sanitizeDays(rawDays) {
+        const days = {};
+        if (!rawDays || typeof rawDays !== "object" || Array.isArray(rawDays)) return days;
+        const today = dayKey();
+        const keys = Object.keys(rawDays)
+          .filter((key) => /^\d{4}-\d{2}-\d{2}$/.test(key) && isRealDateKey(key) && key <= today)
+          .sort()
+          .slice(-KEEP_DAYS);
+        keys.forEach((key) => {
+          const day = sanitizeDayRecord(rawDays[key]);
+          if (Object.keys(day.morning).length > 0 || Object.keys(day.evening).length > 0) {
+            days[key] = day;
+          }
+        });
+        return days;
+      }
+
       function loadState() {
         try {
           const raw = localStorage.getItem(STORAGE_KEY);
           if (!raw) return { days: {} };
 
           const parsed = JSON.parse(raw);
-          if (!parsed || typeof parsed !== "object" || typeof parsed.days !== "object" || parsed.days === null) {
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || typeof parsed.days !== "object" || parsed.days === null) {
             return { days: {} };
           }
-          return { days: parsed.days };
+          return { days: sanitizeDays(parsed.days) };
         } catch (error) {
           return { days: {} };
         }
@@ -1344,9 +1780,14 @@
       /* ===== الإعدادات ===== */
       function normalizeSettings(raw) {
         if (!raw || typeof raw !== "object") return null;
+        const lastExportAt =
+          typeof raw.lastExportAt === "string" && !Number.isNaN(Date.parse(raw.lastExportAt))
+            ? raw.lastExportAt
+            : null;
         return {
           fontSize: FONT_SIZES.includes(raw.fontSize) ? raw.fontSize : DEFAULT_SETTINGS.fontSize,
           theme: THEMES.includes(raw.theme) ? raw.theme : DEFAULT_SETTINGS.theme,
+          lastExportAt,
         };
       }
 
@@ -1372,9 +1813,19 @@
         document.documentElement.dataset.fontSize = settings.fontSize;
       }
 
+      let lastVisualPeriod = null;
       function applyTheme() {
-        const visualPeriod = settings.theme === "auto" ? activePeriod : settings.theme;
+        let visualPeriod;
+        if (settings.theme === "morning" || settings.theme === "evening") visualPeriod = settings.theme;
+        else if (settings.theme === "time") visualPeriod = detectPeriod();
+        else visualPeriod = activePeriod;
+        if (visualPeriod === lastVisualPeriod) return;
+        lastVisualPeriod = visualPeriod;
         document.documentElement.dataset.period = visualPeriod;
+      }
+
+      function refreshClockTheme() {
+        if (settings.theme === "time") applyTheme();
       }
 
       function syncSettingsUI() {
@@ -1394,7 +1845,6 @@
         progressText: document.getElementById("progress-text"),
         progressBar: document.getElementById("progress-bar"),
         progressFill: document.getElementById("progress-fill"),
-        history: document.getElementById("history"),
         reset: document.getElementById("reset-day"),
         gregDate: document.getElementById("date-greg"),
         hijriDate: document.getElementById("date-hijri"),
@@ -1409,14 +1859,33 @@
         themeButtons: Array.from(document.querySelectorAll("[data-theme]")),
         exportButton: document.getElementById("export-backup"),
         importButton: document.getElementById("import-backup"),
+        exportCsvButton: document.getElementById("export-csv"),
         importFile: document.getElementById("import-file"),
         importConfirm: document.getElementById("import-confirm"),
         importSummary: document.getElementById("import-summary"),
         importApply: document.getElementById("import-apply"),
         importCancel: document.getElementById("import-cancel"),
         backupStatus: document.getElementById("backup-status"),
+        backupReminder: document.getElementById("backup-reminder"),
         tabs: Array.from(document.querySelectorAll(".tab")),
         tablist: document.querySelector(".period-tabs"),
+        streakCurrent: document.getElementById("streak-current"),
+        streakBest: document.getElementById("streak-best"),
+        streakNote: document.getElementById("streak-note"),
+        weeklySummary: document.getElementById("weekly-summary"),
+        calendarMonth: document.getElementById("calendar-month"),
+        calendarPrev: document.getElementById("calendar-prev"),
+        calendarNext: document.getElementById("calendar-next"),
+        calendarGrid: document.getElementById("calendar-grid"),
+        calendarDetail: document.getElementById("calendar-detail"),
+        counterDialog: document.getElementById("counter-dialog"),
+        counterTitle: document.getElementById("counter-title"),
+        counterText: document.getElementById("counter-text"),
+        counterCount: document.getElementById("counter-count"),
+        counterFill: document.getElementById("counter-fill"),
+        counterButton: document.getElementById("counter-button"),
+        counterClose: document.getElementById("counter-close"),
+        counterReset: document.getElementById("counter-reset"),
       };
 
       let settings = loadSettings();
@@ -1429,6 +1898,16 @@
       let highlightTimer = null;
       let pendingImport = null;
       let touchStart = null;
+      let insightsSignature = "";
+      let previousDone = null;
+      let calendarMonth = startOfMonth(new Date());
+      let selectedCalendarKey = dayKey();
+      let counterKey = null;
+      let counterOpener = null;
+      let counterResetArmed = false;
+      let counterResetTimer = null;
+      let celebrationTimer = null;
+      let pendingCelebration = null;
 
       /* ===== التاريخ ===== */
       function formatGregorian(date) {
@@ -1490,6 +1969,24 @@
         return `تسجيل ${item.title}، أكملت ${toArabicNumber(progress.count)} من ${toArabicNumber(item.count)}`;
       }
 
+      function appendDhikrText(container, item) {
+        if (item.basmala) {
+          container.append(paragraph("basmala", "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ"));
+        }
+        if (item.ayah) {
+          container.append(paragraph("ayah", "﴿" + item.ayah + "﴾"));
+        }
+        (item.lines || []).forEach((line) => {
+          container.append(paragraph("dhikr-text", line));
+        });
+        if (item.source) {
+          container.append(paragraph("source", "[" + item.source + "]"));
+        }
+        if (item.note) {
+          container.append(paragraph("note", item.note));
+        }
+      }
+
       function createItem(period, item, index) {
         const key = itemKey(period, index);
         const saved = getEntry(period, key);
@@ -1525,25 +2022,17 @@
         }
 
         body.append(head);
-
-        if (item.basmala) {
-          body.append(paragraph("basmala", "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ"));
-        }
-        if (item.ayah) {
-          body.append(paragraph("ayah", "﴿" + item.ayah + "﴾"));
-        }
-        (item.lines || []).forEach((line) => {
-          body.append(paragraph("dhikr-text", line));
-        });
-        if (item.source) {
-          body.append(paragraph("source", "[" + item.source + "]"));
-        }
-        if (item.note) {
-          body.append(paragraph("note", item.note));
-        }
+        appendDhikrText(body, item);
 
         const actions = document.createElement("div");
         actions.className = "dhikr-actions";
+
+        const counterButton = document.createElement("button");
+        counterButton.type = "button";
+        counterButton.className = "counter-open";
+        counterButton.textContent = "عدّ";
+        counterButton.setAttribute("aria-label", `فتح العدّاد: ${item.title}`);
+        counterButton.addEventListener("click", () => openCounter(key, counterButton));
 
         const pill = document.createElement("button");
         pill.type = "button";
@@ -1555,6 +2044,7 @@
         undo.textContent = "إعادة";
         undo.setAttribute("aria-label", `إعادة تعيين: ${item.title}`);
 
+        if (item.count > 1) actions.append(counterButton);
         actions.append(pill, undo);
         body.append(actions);
         card.append(marker, body);
@@ -1584,8 +2074,8 @@
           return { count: progress.count, done: progress.done };
         }
 
-        pill.addEventListener("click", () => {
-          if (isComplete()) return;
+        function increment() {
+          if (isComplete()) return false;
           const before = snapshot();
 
           if (item.count === 0) {
@@ -1597,16 +2087,17 @@
 
           persist();
           paint();
-          updateProgress();
           showUndo(key, item.title, before, isComplete() ? "تم إكمال" : "تم تسجيل");
 
           if (isComplete()) {
             announce(`تم إكمال: ${item.title}`);
           }
-        });
+          updateProgress();
+          return true;
+        }
 
-        undo.addEventListener("click", () => {
-          if (progress.count === 0 && !progress.done) return;
+        function resetProgress() {
+          if (progress.count === 0 && !progress.done) return false;
           const before = snapshot();
           progress.count = 0;
           progress.done = false;
@@ -1615,11 +2106,21 @@
           updateProgress();
           showUndo(key, item.title, before, "أُعيد تعيين");
           announce(`أُعيد تعيين: ${item.title}`);
-        });
+          return true;
+        }
+
+        pill.addEventListener("click", increment);
+        undo.addEventListener("click", resetProgress);
 
         paint();
         itemControllers.set(key, {
           element: card,
+          item,
+          period,
+          index,
+          increment,
+          reset: resetProgress,
+          getProgress: snapshot,
           applyProgress(next) {
             progress.count = next.count;
             progress.done = next.done;
@@ -1635,6 +2136,7 @@
 
       /* ===== عرض القسم ===== */
       function renderPeriod(period) {
+        closeCounter({ celebratePending: false });
         activePeriod = period;
         applyTheme();
         hideUndo();
@@ -1654,14 +2156,24 @@
           tab.tabIndex = selected ? 0 : -1;
         });
 
+        previousDone = countCompleted(period);
+        insightsSignature = "";
         updateProgress();
         updateTimeLeft();
+      }
+
+      function updateTabTitle(section, done, total) {
+        const remaining = total - done;
+        document.title =
+          remaining === 0 ? `✓ ${section.name}` : `(${toArabicNumber(remaining)}) ${section.name}`;
       }
 
       function updateProgress() {
         const section = SECTIONS[activePeriod];
         const total = section.items.length;
         const done = countCompleted(activePeriod);
+        const justCompleted = previousDone !== null && done === total && previousDone < total;
+        previousDone = done;
 
         elements.progressText.textContent =
           done === total
@@ -1685,55 +2197,18 @@
             `${toArabicNumber(periodDone)} من ${toArabicNumber(periodTotal)}`;
         });
 
-        renderHistory();
-      }
+        updateTabTitle(section, done, total);
 
-      /* ===== سجل آخر سبعة أيام ===== */
-      function createBar(period, key) {
-        const bar = document.createElement("span");
-        bar.className = "bar" + (isSectionComplete(period, key) ? " is-on" : "");
-        return bar;
-      }
-
-      function renderHistory() {
-        const today = new Date();
-        const days = [];
-
-        for (let offset = HISTORY_DAYS - 1; offset >= 0; offset -= 1) {
-          const date = new Date(today);
-          date.setDate(today.getDate() - offset);
-          days.push(date);
+        const signature = `${countCompleted("morning")}:${countCompleted("evening")}`;
+        if (signature !== insightsSignature) {
+          insightsSignature = signature;
+          renderInsights();
         }
 
-        elements.history.replaceChildren(
-          ...days.map((date) => {
-            const key = dayKey(date);
-            const isToday = key === dayKey();
-
-            const day = document.createElement("div");
-            day.className = "day" + (isToday ? " is-today" : "");
-            day.setAttribute("role", "img");
-            day.setAttribute(
-              "aria-label",
-              `${formatWeekday(date)} ${toArabicNumber(date.getDate())}: ` +
-                `الصباح ${isSectionComplete("morning", key) ? "مكتمل" : "غير مكتمل"}، ` +
-                `المساء ${isSectionComplete("evening", key) ? "مكتمل" : "غير مكتمل"}`
-            );
-
-            const number = document.createElement("span");
-            number.className = "day-num";
-            number.textContent = toArabicNumber(date.getDate());
-
-            const bars = document.createElement("span");
-            bars.className = "day-bars";
-            bars.append(createBar("morning", key), createBar("evening", key));
-
-            day.append(number, bars);
-            return day;
-          })
-        );
+        if (justCompleted) celebrate(section);
       }
 
+      /* ===== التقدم: السلسلة والملخص والتقويم ===== */
       function formatWeekday(date) {
         try {
           return new Intl.DateTimeFormat("ar", { weekday: "long" }).format(date);
@@ -1741,6 +2216,306 @@
           return "";
         }
       }
+
+      function formatMonthLabel(date) {
+        try {
+          return new Intl.DateTimeFormat("ar", { month: "long", year: "numeric" }).format(date);
+        } catch (error) {
+          return `${date.getMonth() + 1}/${date.getFullYear()}`;
+        }
+      }
+
+      function getCurrentStreak() {
+        let cursor = new Date();
+        if (!isDayComplete(dayKey(cursor))) cursor = addDays(cursor, -1);
+
+        let streak = 0;
+        for (let index = 0; index < KEEP_DAYS; index += 1) {
+          if (!isDayComplete(dayKey(cursor))) break;
+          streak += 1;
+          cursor = addDays(cursor, -1);
+        }
+        return streak;
+      }
+
+      function getBestStreak() {
+        const keys = Object.keys(state.days).sort();
+        let best = 0;
+        let run = 0;
+        let previous = null;
+
+        keys.forEach((key) => {
+          if (!isDayComplete(key)) {
+            run = 0;
+            previous = key;
+            return;
+          }
+          run = previous && dayDifference(previous, key) === 1 ? run + 1 : 1;
+          previous = key;
+          if (run > best) best = run;
+        });
+        return best;
+      }
+
+      function getWeekSummary() {
+        const summary = { complete: 0, morning: 0, evening: 0 };
+        const today = new Date();
+        for (let offset = 6; offset >= 0; offset -= 1) {
+          const key = dayKey(addDays(today, -offset));
+          if (isSectionComplete("morning", key)) summary.morning += 1;
+          if (isSectionComplete("evening", key)) summary.evening += 1;
+          if (isDayComplete(key)) summary.complete += 1;
+        }
+        return summary;
+      }
+
+      function calendarDot(isOn) {
+        const dot = document.createElement("span");
+        dot.className = "calendar-dot" + (isOn ? " is-on" : "");
+        return dot;
+      }
+
+      function calendarDayLabel(date, morningDone, eveningDone, isFuture) {
+        const status = isFuture
+          ? "لم يأت بعد"
+          : `الصباح ${morningDone ? "مكتمل" : "غير مكتمل"}، المساء ${eveningDone ? "مكتمل" : "غير مكتمل"}`;
+        return `${formatWeekday(date)} ${toArabicNumber(date.getDate())} ${formatMonthLabel(date)}: ${status}`;
+      }
+
+      function renderCalendarDetail() {
+        const key = selectedCalendarKey;
+        if (!key) {
+          elements.calendarDetail.textContent = "";
+          return;
+        }
+        const date = parseDateKey(key);
+        if (key > dayKey()) {
+          elements.calendarDetail.textContent = "";
+          return;
+        }
+        if (!state.days[key]) {
+          elements.calendarDetail.textContent =
+            `${formatWeekday(date)} ${toArabicNumber(date.getDate())} ${formatMonthLabel(date)} — لا يوجد تقدم مسجل.`;
+          return;
+        }
+        const morningDone = countCompleted("morning", key);
+        const eveningDone = countCompleted("evening", key);
+        elements.calendarDetail.textContent =
+          `${formatWeekday(date)} ${toArabicNumber(date.getDate())} ${formatMonthLabel(date)} — ` +
+          `الصباح ${toArabicNumber(morningDone)}/${toArabicNumber(SECTIONS.morning.items.length)}، ` +
+          `المساء ${toArabicNumber(eveningDone)}/${toArabicNumber(SECTIONS.evening.items.length)}.`;
+      }
+
+      function renderCalendar() {
+        const today = new Date();
+        const todayKey = dayKey(today);
+        const currentMonth = startOfMonth(today);
+        const oldestKey = Object.keys(state.days).sort()[0];
+        const minMonth = oldestKey ? startOfMonth(parseDateKey(oldestKey)) : currentMonth;
+
+        if (calendarMonth < minMonth) calendarMonth = new Date(minMonth);
+        if (calendarMonth > currentMonth) calendarMonth = new Date(currentMonth);
+
+        elements.calendarMonth.textContent = formatMonthLabel(calendarMonth);
+        elements.calendarPrev.disabled = calendarMonth <= minMonth;
+        elements.calendarNext.disabled = calendarMonth >= currentMonth;
+
+        const year = calendarMonth.getFullYear();
+        const month = calendarMonth.getMonth();
+        const firstWeekday = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const cells = [];
+
+        for (let index = 0; index < firstWeekday; index += 1) {
+          const blank = document.createElement("span");
+          blank.className = "calendar-day is-empty";
+          blank.setAttribute("aria-hidden", "true");
+          cells.push(blank);
+        }
+
+        for (let day = 1; day <= daysInMonth; day += 1) {
+          const date = new Date(year, month, day);
+          const key = dayKey(date);
+          const isFuture = key > todayKey;
+          const morningDone = isSectionComplete("morning", key);
+          const eveningDone = isSectionComplete("evening", key);
+          const bothDone = morningDone && eveningDone;
+          const partial = (morningDone || eveningDone) && !bothDone;
+
+          const cell = document.createElement("button");
+          cell.type = "button";
+          cell.className = "calendar-day";
+          if (isFuture) cell.classList.add("is-future");
+          if (key === todayKey) cell.classList.add("is-today");
+          if (key === selectedCalendarKey) cell.classList.add("is-selected");
+          if (bothDone) cell.classList.add("is-complete");
+          else if (partial) cell.classList.add("is-partial");
+          cell.dataset.key = key;
+          cell.disabled = isFuture;
+          cell.setAttribute("aria-label", calendarDayLabel(date, morningDone, eveningDone, isFuture));
+          cell.setAttribute("aria-pressed", String(key === selectedCalendarKey));
+
+          const number = document.createElement("span");
+          number.textContent = toArabicNumber(day);
+
+          const dots = document.createElement("span");
+          dots.className = "calendar-dots";
+          dots.setAttribute("aria-hidden", "true");
+          dots.append(calendarDot(morningDone), calendarDot(eveningDone));
+
+          cell.append(number, dots);
+          cell.addEventListener("click", () => {
+            selectedCalendarKey = key;
+            elements.calendarGrid.querySelectorAll(".calendar-day").forEach((dayCell) => {
+              if (!dayCell.dataset.key) return;
+              const isSelected = dayCell.dataset.key === key;
+              dayCell.classList.toggle("is-selected", isSelected);
+              dayCell.setAttribute("aria-pressed", String(isSelected));
+            });
+            renderCalendarDetail();
+          });
+          cells.push(cell);
+        }
+
+        elements.calendarGrid.replaceChildren(...cells);
+        renderCalendarDetail();
+      }
+
+      function renderInsights() {
+        const todayComplete = isDayComplete(dayKey());
+        elements.streakCurrent.textContent = toArabicNumber(getCurrentStreak());
+        elements.streakBest.textContent = toArabicNumber(getBestStreak());
+        elements.streakNote.textContent = todayComplete ? "" : "أكمل اليوم للحفاظ عليها";
+
+        const week = getWeekSummary();
+        elements.weeklySummary.textContent =
+          `هذا الأسبوع: ${toArabicNumber(week.complete)}/٧ أيام كاملة · ` +
+          `الصباح ${toArabicNumber(week.morning)}/٧ · المساء ${toArabicNumber(week.evening)}/٧`;
+
+        renderCalendar();
+      }
+
+      function celebrate(section) {
+        if (elements.counterDialog && elements.counterDialog.open) {
+          pendingCelebration = section;
+          return;
+        }
+        elements.progressBar.classList.remove("is-celebrating");
+        void elements.progressBar.offsetWidth;
+        elements.progressBar.classList.add("is-celebrating");
+        clearTimeout(celebrationTimer);
+        celebrationTimer = setTimeout(() => {
+          elements.progressBar.classList.remove("is-celebrating");
+        }, 1200);
+        announce(`أكملت ${section.name} كاملة`);
+      }
+
+      /* ===== العدّاد الكبير ===== */
+      function updateCounterUI() {
+        const controller = counterKey ? itemControllers.get(counterKey) : null;
+        if (!controller) return;
+        const progress = controller.getProgress();
+        const item = controller.item;
+        const complete = progress.count >= item.count;
+
+        elements.counterCount.textContent =
+          `${toArabicNumber(progress.count)} من ${toArabicNumber(item.count)}`;
+        elements.counterFill.style.width = item.count
+          ? `${Math.min(100, (progress.count / item.count) * 100)}%`
+          : "0%";
+        elements.counterButton.textContent = complete ? "تم ✓" : "عدّ";
+        elements.counterButton.disabled = complete;
+        elements.counterReset.disabled = progress.count === 0 && !progress.done;
+        if (elements.counterReset.disabled) disarmCounterReset();
+      }
+
+      function disarmCounterReset() {
+        counterResetArmed = false;
+        clearTimeout(counterResetTimer);
+        counterResetTimer = null;
+        elements.counterReset.textContent = "إعادة العدّ";
+        elements.counterReset.classList.remove("is-confirming");
+      }
+
+      function openCounter(key, opener) {
+        const controller = itemControllers.get(key);
+        if (!controller || !elements.counterDialog || elements.counterDialog.open) return;
+
+        counterKey = key;
+        counterOpener = opener;
+        elements.counterTitle.textContent = controller.item.title;
+        elements.counterText.replaceChildren();
+        appendDhikrText(elements.counterText, controller.item);
+        disarmCounterReset();
+        updateCounterUI();
+        document.body.classList.add("is-dialog-open");
+
+        if (typeof elements.counterDialog.showModal === "function") {
+          elements.counterDialog.showModal();
+        } else {
+          elements.counterDialog.setAttribute("open", "");
+        }
+        elements.counterButton.focus({ preventScroll: true });
+      }
+
+      function closeCounter(options = {}) {
+        if (options.celebratePending === false) pendingCelebration = null;
+        if (!elements.counterDialog || !elements.counterDialog.open) return;
+        elements.counterDialog.close();
+      }
+
+      elements.counterButton.addEventListener("click", () => {
+        const controller = counterKey ? itemControllers.get(counterKey) : null;
+        if (!controller) return;
+        if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+          try {
+            navigator.vibrate(10);
+          } catch (error) {
+            // الاهتزاز اختياري وغير مدعوم في بعض المتصفحات.
+          }
+        }
+        disarmCounterReset();
+        controller.increment();
+        updateCounterUI();
+      });
+
+      elements.counterReset.addEventListener("click", () => {
+        const controller = counterKey ? itemControllers.get(counterKey) : null;
+        if (!controller) return;
+
+        if (!counterResetArmed) {
+          counterResetArmed = true;
+          elements.counterReset.textContent = "اضغط مرة أخرى للتأكيد";
+          elements.counterReset.classList.add("is-confirming");
+          clearTimeout(counterResetTimer);
+          counterResetTimer = setTimeout(disarmCounterReset, 4000);
+          return;
+        }
+
+        disarmCounterReset();
+        controller.reset();
+        updateCounterUI();
+      });
+
+      elements.counterClose.addEventListener("click", () => closeCounter());
+      elements.counterDialog.addEventListener("click", (event) => {
+        if (event.target === elements.counterDialog) closeCounter();
+      });
+      elements.counterDialog.addEventListener("close", () => {
+        document.body.classList.remove("is-dialog-open");
+        counterKey = null;
+        disarmCounterReset();
+
+        const opener = counterOpener;
+        counterOpener = null;
+        if (opener && opener.isConnected) opener.focus({ preventScroll: true });
+
+        if (pendingCelebration) {
+          const section = pendingCelebration;
+          pendingCelebration = null;
+          celebrate(section);
+        }
+      });
 
       /* ===== الإعلانات لقارئ الشاشة ===== */
       function announce(message) {
@@ -1863,6 +2638,47 @@
         elements.backupStatus.classList.toggle("is-error", isError);
       }
 
+      function formatDayCount(days) {
+        if (days <= 0) return "اليوم";
+        if (days === 1) return "قبل يوم";
+        if (days === 2) return "قبل يومين";
+        if (days <= 10) return `قبل ${toArabicNumber(days)} أيام`;
+        return `قبل ${toArabicNumber(days)} يوماً`;
+      }
+
+      function formatDayTotal(value) {
+        if (value === 0) return "لا أيام";
+        if (value === 1) return "يوم واحد";
+        if (value === 2) return "يومين";
+        if (value <= 10) return `${toArabicNumber(value)} أيام`;
+        return `${toArabicNumber(value)} يوماً`;
+      }
+
+      function updateBackupReminder() {
+        if (!settings.lastExportAt) {
+          elements.backupReminder.textContent = "لم تصدّر نسخة احتياطية بعد.";
+          elements.backupReminder.classList.remove("is-warning");
+          return;
+        }
+
+        const exportedAt = Date.parse(settings.lastExportAt);
+        if (Number.isNaN(exportedAt)) {
+          elements.backupReminder.textContent = "لم تصدّر نسخة احتياطية بعد.";
+          elements.backupReminder.classList.remove("is-warning");
+          return;
+        }
+
+        const days = Math.max(0, Math.floor((Date.now() - exportedAt) / 86400000));
+        if (days >= BACKUP_REMINDER_DAYS) {
+          elements.backupReminder.textContent =
+            `آخر نسخة ${formatDayCount(days)} — يُنصح بتصدير نسخة جديدة.`;
+          elements.backupReminder.classList.add("is-warning");
+        } else {
+          elements.backupReminder.textContent = `آخر نسخة: ${formatDayCount(days)}.`;
+          elements.backupReminder.classList.remove("is-warning");
+        }
+      }
+
       function isRealDateKey(key) {
         const [year, month, day] = key.split("-").map(Number);
         const date = new Date(year, month - 1, day);
@@ -1892,39 +2708,7 @@
           return { ok: false, reason: "الملف لا يحتوي بيانات أذكار." };
         }
 
-        const today = dayKey();
-        const days = {};
-        const keys = Object.keys(raw.days)
-          .filter((key) => /^\d{4}-\d{2}-\d{2}$/.test(key) && isRealDateKey(key) && key <= today)
-          .sort()
-          .slice(-KEEP_DAYS);
-
-        keys.forEach((key) => {
-          const source = raw.days[key];
-          if (!source || typeof source !== "object") return;
-
-          const day = emptyDay();
-          ["morning", "evening"].forEach((period) => {
-            const record = source[period];
-            if (!record || typeof record !== "object") return;
-
-            SECTIONS[period].items.forEach((item, index) => {
-              const entry = record[itemKey(period, index)];
-              if (!entry || typeof entry !== "object") return;
-
-              const count = Math.max(0, Math.floor(Number(entry.count) || 0));
-              day[period][itemKey(period, index)] =
-                item.count === 0
-                  ? { count: 0, done: Boolean(entry.done) }
-                  : { count: Math.min(count, item.count), done: count >= item.count };
-            });
-          });
-
-          if (Object.keys(day.morning).length > 0 || Object.keys(day.evening).length > 0) {
-            days[key] = day;
-          }
-        });
-
+        const days = sanitizeDays(raw.days);
         const dayCount = Object.keys(days).length;
         if (dayCount === 0) {
           return { ok: false, reason: "الملف لا يحتوي أي بيانات صالحة." };
@@ -1939,26 +2723,88 @@
         };
       }
 
-      function exportBackup() {
-        const payload = {
-          app: "douaa-tracker",
-          version: 1,
-          exportedAt: new Date().toISOString(),
-          days: state.days,
-          settings: { ...settings },
-        };
-        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      function downloadFile(content, filename, type) {
+        const blob = new Blob([content], { type });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `douaa-tracker-${dayKey()}.json`;
+        link.download = filename;
         document.body.append(link);
         link.click();
         link.remove();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+
+      function exportBackup() {
+        settings.lastExportAt = new Date().toISOString();
+        saveSettings();
+        updateBackupReminder();
+
+        const payload = {
+          app: "douaa-tracker",
+          version: 1,
+          exportedAt: settings.lastExportAt,
+          days: state.days,
+          settings: { ...settings },
+        };
+
+        downloadFile(
+          JSON.stringify(payload, null, 2),
+          `douaa-tracker-${dayKey()}.json`,
+          "application/json"
+        );
 
         const dayCount = Object.keys(state.days).length;
-        setBackupStatus(`تم تصدير نسخة تحتوي ${toArabicNumber(dayCount)} يوماً.`);
+        setBackupStatus(
+          dayCount === 0
+            ? "تم تصدير نسخة فارغة."
+            : `تم تصدير نسخة تحتوي ${formatDayTotal(dayCount)}.`
+        );
+      }
+
+      function csvCell(value) {
+        const text = String(value);
+        return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+      }
+
+      function exportCsv() {
+        const keys = Object.keys(state.days).sort();
+        if (keys.length === 0) {
+          setBackupStatus("لا توجد بيانات لتصديرها بعد.", true);
+          return;
+        }
+
+        const rows = [
+          [
+            "التاريخ",
+            "اكتمل الصباح",
+            "أذكار الصباح المكتملة",
+            "اكتمل المساء",
+            "أذكار المساء المكتملة",
+            "اكتمل اليوم",
+          ],
+        ];
+
+        keys.forEach((key) => {
+          const morningDone = countCompleted("morning", key);
+          const eveningDone = countCompleted("evening", key);
+          const morningComplete = isSectionComplete("morning", key);
+          const eveningComplete = isSectionComplete("evening", key);
+          rows.push([
+            key,
+            morningComplete ? "نعم" : "لا",
+            `${morningDone}/${SECTIONS.morning.items.length}`,
+            eveningComplete ? "نعم" : "لا",
+            `${eveningDone}/${SECTIONS.evening.items.length}`,
+            morningComplete && eveningComplete ? "نعم" : "لا",
+          ]);
+        });
+
+        const csv =
+          "\uFEFF" + rows.map((row) => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
+
+        downloadFile(csv, `douaa-tracker-${dayKey()}.csv`, "text/csv;charset=utf-8");
+        setBackupStatus(`تم تصدير ${formatDayTotal(keys.length)} إلى CSV.`);
       }
 
       function handleImportFile(file) {
@@ -1986,7 +2832,7 @@
             pendingImport = result;
             const replaced = result.settings ? "تقدمك وإعداداتك الحالية" : "تقدمك الحالي";
             elements.importSummary.textContent =
-              `الملف يحتوي ${toArabicNumber(result.dayCount)} يوماً، آخرها ${formatBackupDate(
+              `الملف يحتوي ${formatDayTotal(result.dayCount)}، آخرها ${formatBackupDate(
                 result.lastDate
               )}. سيستبدل هذا ${replaced}.`;
             elements.importConfirm.hidden = false;
@@ -2009,17 +2855,24 @@
         saveState();
 
         if (imported.settings) {
-          settings = { ...settings, ...imported.settings };
+          const importedSettings = { ...imported.settings };
+          // تاريخ التصدير يخص هذا الجهاز: لا نمسح تذكيره إن كان الملف لا يحمل تاريخاً.
+          if (!importedSettings.lastExportAt) delete importedSettings.lastExportAt;
+          settings = { ...settings, ...importedSettings };
           saveSettings();
           applyFontSize();
+          applyTheme();
           syncSettingsUI();
         }
 
         pendingImport = null;
         elements.importConfirm.hidden = true;
         elements.importFile.value = "";
+        selectedCalendarKey = dayKey();
+        calendarMonth = startOfMonth(new Date());
         renderPeriod(activePeriod);
-        setBackupStatus(`تم استيراد ${toArabicNumber(imported.dayCount)} يوماً.`);
+        updateBackupReminder();
+        setBackupStatus(`تم استيراد ${formatDayTotal(imported.dayCount)}.`);
         announce("تم استيراد النسخة الاحتياطية");
       }
 
@@ -2072,6 +2925,7 @@
       elements.undoButton.addEventListener("click", performUndo);
 
       elements.exportButton.addEventListener("click", exportBackup);
+      elements.exportCsvButton.addEventListener("click", exportCsv);
       elements.importButton.addEventListener("click", () => elements.importFile.click());
       elements.importFile.addEventListener("change", () => {
         const file = elements.importFile.files && elements.importFile.files[0];
@@ -2083,6 +2937,18 @@
         elements.importConfirm.hidden = true;
         elements.importFile.value = "";
         setBackupStatus("");
+      });
+
+      elements.calendarPrev.addEventListener("click", () => {
+        calendarMonth = startOfMonth(addMonths(calendarMonth, -1));
+        selectedCalendarKey = dayKey(calendarMonth);
+        renderCalendar();
+      });
+
+      elements.calendarNext.addEventListener("click", () => {
+        calendarMonth = startOfMonth(addMonths(calendarMonth, 1));
+        selectedCalendarKey = dayKey(calendarMonth);
+        renderCalendar();
       });
 
       /* ===== السحب الأفقي بين القسمين ===== */
@@ -2161,6 +3027,7 @@
         cancelReset();
         delete state.days[dayKey()];
         saveState();
+        selectedCalendarKey = dayKey();
         renderPeriod(activePeriod);
         announce("أُعيد تعيين تقدم اليوم");
       });
@@ -2169,6 +3036,8 @@
       function checkDayChange() {
         if (renderedDay === dayKey()) return;
         renderedDay = dayKey();
+        selectedCalendarKey = renderedDay;
+        calendarMonth = startOfMonth(new Date());
         updateDates();
         renderPeriod(activePeriod);
       }
@@ -2177,15 +3046,21 @@
         if (document.visibilityState !== "visible") return;
         checkDayChange();
         updateTimeLeft();
+        refreshClockTheme();
+        updateBackupReminder();
       });
 
       setInterval(checkDayChange, 60000);
-      setInterval(updateTimeLeft, 30000);
+      setInterval(() => {
+        updateTimeLeft();
+        refreshClockTheme();
+      }, 30000);
 
       /* ===== بدء التشغيل ===== */
       syncSettingsUI();
       applyFontSize();
       updateDates();
+      updateBackupReminder();
       renderPeriod(detectPeriod());
     })();
   </script>
