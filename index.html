@@ -1358,7 +1358,10 @@
         <div class="import-confirm" id="import-confirm" hidden>
           <p class="setting-note" id="import-summary"></p>
           <div class="backup-actions">
-            <button type="button" class="ghost-button is-primary" id="import-apply">تأكيد الاستيراد</button>
+            <button type="button" class="ghost-button is-primary" id="import-merge">
+              دمج مع الحالي
+            </button>
+            <button type="button" class="ghost-button" id="import-apply">استبدال الكل</button>
             <button type="button" class="ghost-button" id="import-cancel">إلغاء</button>
           </div>
         </div>
@@ -1864,6 +1867,7 @@
         importConfirm: document.getElementById("import-confirm"),
         importSummary: document.getElementById("import-summary"),
         importApply: document.getElementById("import-apply"),
+        importMerge: document.getElementById("import-merge"),
         importCancel: document.getElementById("import-cancel"),
         backupStatus: document.getElementById("backup-status"),
         backupReminder: document.getElementById("backup-reminder"),
@@ -2654,6 +2658,14 @@
         return `${toArabicNumber(value)} يوماً`;
       }
 
+      function describeMergedDays(addedDays) {
+        if (addedDays === 0) return "لم تُضف أيام جديدة";
+        if (addedDays === 1) return "أُضيف يوم جديد";
+        if (addedDays === 2) return "أُضيف يومان جديدان";
+        if (addedDays <= 10) return `أُضيفت ${toArabicNumber(addedDays)} أيام جديدة`;
+        return `أُضيف ${toArabicNumber(addedDays)} يوماً جديداً`;
+      }
+
       function updateBackupReminder() {
         if (!settings.lastExportAt) {
           elements.backupReminder.textContent = "لم تصدّر نسخة احتياطية بعد.";
@@ -2830,11 +2842,10 @@
             if (!result.ok) throw new Error(result.reason);
 
             pendingImport = result;
-            const replaced = result.settings ? "تقدمك وإعداداتك الحالية" : "تقدمك الحالي";
             elements.importSummary.textContent =
               `الملف يحتوي ${formatDayTotal(result.dayCount)}، آخرها ${formatBackupDate(
                 result.lastDate
-              )}. سيستبدل هذا ${replaced}.`;
+              )}. «دمج» يحتفظ بالعدد الأكبر لكل ذكر ويبقي إعداداتك، و«استبدال» يمسح كل ما لديك.`;
             elements.importConfirm.hidden = false;
             setBackupStatus("");
           })
@@ -2844,6 +2855,63 @@
             elements.importFile.value = "";
             setBackupStatus(error.message || "تعذّر قراءة الملف.", true);
           });
+      }
+
+      function mergeItemEntry(item, currentEntry, importedEntry) {
+        if (!currentEntry && !importedEntry) return null;
+
+        if (item.count === 0) {
+          return {
+            count: 0,
+            done: Boolean(
+              (currentEntry && currentEntry.done) || (importedEntry && importedEntry.done)
+            ),
+          };
+        }
+
+        const currentCount = currentEntry ? currentEntry.count : 0;
+        const importedCount = importedEntry ? importedEntry.count : 0;
+        const count = Math.min(item.count, Math.max(currentCount, importedCount));
+        return { count, done: count >= item.count };
+      }
+
+      function mergeDayRecords(currentDay, importedDay) {
+        const merged = emptyDay();
+
+        ["morning", "evening"].forEach((period) => {
+          const currentRecord = currentDay[period] || {};
+          const importedRecord = importedDay[period] || {};
+
+          SECTIONS[period].items.forEach((item, index) => {
+            const key = itemKey(period, index);
+            const entry = mergeItemEntry(item, currentRecord[key], importedRecord[key]);
+            if (entry) merged[period][key] = entry;
+          });
+        });
+
+        return merged;
+      }
+
+      function mergeDays(currentDays, importedDays) {
+        const merged = { ...currentDays };
+
+        Object.keys(importedDays).forEach((key) => {
+          merged[key] = currentDays[key]
+            ? mergeDayRecords(currentDays[key], importedDays[key])
+            : importedDays[key];
+        });
+
+        return merged;
+      }
+
+      function finishImport() {
+        pendingImport = null;
+        elements.importConfirm.hidden = true;
+        elements.importFile.value = "";
+        selectedCalendarKey = dayKey();
+        calendarMonth = startOfMonth(new Date());
+        renderPeriod(activePeriod);
+        updateBackupReminder();
       }
 
       function applyImport() {
@@ -2865,15 +2933,26 @@
           syncSettingsUI();
         }
 
-        pendingImport = null;
-        elements.importConfirm.hidden = true;
-        elements.importFile.value = "";
-        selectedCalendarKey = dayKey();
-        calendarMonth = startOfMonth(new Date());
-        renderPeriod(activePeriod);
-        updateBackupReminder();
+        finishImport();
         setBackupStatus(`تم استيراد ${formatDayTotal(imported.dayCount)}.`);
         announce("تم استيراد النسخة الاحتياطية");
+      }
+
+      function applyMerge() {
+        if (!pendingImport) return;
+
+        const imported = pendingImport;
+        const addedDays = Object.keys(imported.days).filter((key) => !state.days[key]).length;
+
+        state = { days: mergeDays(state.days, imported.days) };
+        pruneDays();
+        saveState();
+
+        finishImport();
+        setBackupStatus(
+          `تم دمج ${formatDayTotal(imported.dayCount)} من الملف، ${describeMergedDays(addedDays)}.`
+        );
+        announce("تم دمج النسخة الاحتياطية");
       }
 
       /* ===== التبويبات ===== */
@@ -2932,6 +3011,7 @@
         handleImportFile(file);
       });
       elements.importApply.addEventListener("click", applyImport);
+      elements.importMerge.addEventListener("click", applyMerge);
       elements.importCancel.addEventListener("click", () => {
         pendingImport = null;
         elements.importConfirm.hidden = true;
