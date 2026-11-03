@@ -1,0 +1,1164 @@
+/* ===== 1. الأساسيات والمتغيّرات ===== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #e7efe8;
+  --surface: #f6faf5;
+  --ink: #16241e;
+  --ink-soft: #33473d;
+  --muted: #52665b;
+  --line: #c9d8ce;
+  --accent: #0d6a4d;
+  --accent-soft: #d3e7dc;
+  --accent-ink: #f6faf5;
+  --danger: #a4271d;
+  --dua-scale: 1;
+
+  --font-ui: "IBM Plex Sans Arabic", "Noto Kufi Arabic", "Segoe UI", system-ui, sans-serif;
+  --font-dua: "Amiri", "Scheherazade New", "Traditional Arabic", "Noto Naskh Arabic", serif;
+
+  --measure: 42rem;
+  --radius: 10px;
+}
+
+/* ألوان المساء: سماء ليلية بدل ضوء الفجر */
+html[data-period="evening"] {
+  --bg: #0f1523;
+  --surface: #182136;
+  --ink: #e8edf7;
+  --ink-soft: #c3cee2;
+  --muted: #93a3bd;
+  --line: #2a3853;
+  --accent: #a8c0ff;
+  --accent-soft: #22314f;
+  --accent-ink: #0f1523;
+  --danger: #ff9d95;
+}
+
+/* حجم نص الأذكار، يتحكم به قسم الإعدادات */
+html[data-font-size="small"] {
+  --dua-scale: 0.9;
+}
+
+html[data-font-size="large"] {
+  --dua-scale: 1.15;
+}
+
+html[data-font-size="xlarge"] {
+  --dua-scale: 1.3;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 1rem;
+  line-height: 1.6;
+  transition: background-color 0.45s ease, color 0.45s ease;
+}
+
+/* نقش هندسي خفيف في الخلفية، يتبع لون القسم */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-color: var(--accent);
+  opacity: 0.06;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='96'%20height='96'%20viewBox='0%200%2096%2096'%3E%3Cg%20fill='none'%20stroke='%23000'%20stroke-width='1'%3E%3Crect%20x='28'%20y='28'%20width='40'%20height='40'/%3E%3Crect%20x='28'%20y='28'%20width='40'%20height='40'%20transform='rotate(45%2048%2048)'/%3E%3C/g%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='96'%20height='96'%20viewBox='0%200%2096%2096'%3E%3Cg%20fill='none'%20stroke='%23000'%20stroke-width='1'%3E%3Crect%20x='28'%20y='28'%20width='40'%20height='40'/%3E%3Crect%20x='28'%20y='28'%20width='40'%20height='40'%20transform='rotate(45%2048%2048)'/%3E%3C/g%3E%3C/svg%3E");
+  -webkit-mask-size: 96px 96px;
+  mask-size: 96px 96px;
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* ===== 2. الهيكل العام ===== */
+.page {
+  position: relative;
+  z-index: 1;
+  width: min(100% - 2rem, var(--measure));
+  margin-inline: auto;
+  padding-block: 2rem 3rem;
+}
+
+/* ===== 3. الترويسة ===== */
+.masthead {
+  padding-block: 0.5rem 1.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.masthead h1 {
+  margin: 0 0 0.4rem;
+  font-family: var(--font-dua);
+  font-size: clamp(1.8rem, 5vw, 2.5rem);
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.dates .hijri {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+/* ===== 4. تبويبات الصباح والمساء ===== */
+.tabs-wrap {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding-block: 0.75rem;
+  background: var(--bg);
+}
+
+.period-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+  padding: 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.7rem 0.5rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+.tab:hover {
+  color: var(--ink);
+}
+
+.tab[aria-selected="true"] {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.tab-count {
+  font-size: 0.72rem;
+  font-weight: 500;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== 5. عنوان القسم وشريط التقدم ===== */
+.period-panel {
+  margin-top: 1.5rem;
+}
+
+.period-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.period-head h2 {
+  margin: 0;
+  font-family: var(--font-dua);
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.hint {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.8;
+}
+
+.progress-text {
+  flex-shrink: 0;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-track {
+  height: 4px;
+  margin-top: 0.75rem;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.progress-fill {
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.35s ease;
+}
+
+.progress-track.is-celebrating {
+  animation: progress-celebrate 1.1s ease;
+}
+
+@keyframes progress-celebrate {
+  0% {
+    box-shadow: 0 0 0 0 var(--accent-soft);
+  }
+
+  45% {
+    box-shadow: 0 0 0 8px var(--accent-soft);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+/* ===== 6. قائمة الأذكار ===== */
+.dhikr-list {
+  position: relative;
+  margin: 1.25rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* خيط رأسي يربط أرقام الأذكار، ويتلاشى عند الطرفين */
+.dhikr-list::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 1.25rem;
+  top: 2rem;
+  bottom: 2rem;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--line) 2.5rem,
+    var(--line) calc(100% - 2.5rem),
+    transparent
+  );
+}
+
+.dhikr {
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  column-gap: 1rem;
+  padding-block: 1.6rem;
+}
+
+.marker {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  align-self: start;
+  justify-self: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+}
+
+.dhikr.is-done .marker {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.dhikr-body {
+  min-width: 0;
+  border-radius: 6px;
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* إبراز مؤقت للذكر عند الانتقال إليه بزر «التالي» */
+.dhikr.is-highlighted .dhikr-body {
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 8px var(--accent-soft);
+}
+
+.dhikr-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.dhikr-title {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.badge {
+  padding: 0.1rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.basmala {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+  font-family: var(--font-dua);
+  font-size: calc(1.05rem * var(--dua-scale));
+  line-height: 1.9;
+}
+
+.ayah {
+  margin: 0.35rem 0 0;
+  font-family: var(--font-dua);
+  font-size: calc(1.45rem * var(--dua-scale));
+  line-height: 2.15;
+  text-wrap: pretty;
+}
+
+.dhikr-text {
+  margin: 0.6rem 0 0;
+  font-family: var(--font-dua);
+  font-size: calc(1.35rem * var(--dua-scale));
+  line-height: 2.05;
+  text-wrap: pretty;
+}
+
+.source {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.note {
+  margin: 0.7rem 0 0;
+  padding-inline-start: 0.7rem;
+  border-inline-start: 2px solid var(--line);
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.9;
+}
+
+/* ===== 7. أزرار العدّ ===== */
+.dhikr-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+
+.pill {
+  min-width: 6.5rem;
+  padding: 0.5rem 1.1rem;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.12s ease;
+}
+
+.pill:hover {
+  background: var(--accent-soft);
+}
+
+.pill:active {
+  transform: scale(0.97);
+}
+
+.pill.is-done {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.pill[aria-disabled="true"] {
+  cursor: default;
+}
+
+.undo {
+  padding: 0.35rem 0.25rem;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  text-decoration: underline;
+  text-underline-offset: 0.3rem;
+  cursor: pointer;
+}
+
+.undo:hover {
+  color: var(--ink);
+}
+
+.undo[hidden] {
+  display: none;
+}
+
+.counter-open {
+  padding: 0.45rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.counter-open:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ===== 8. التذييل والتقدم ===== */
+.site-footer {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.insights-title {
+  margin: 0 0 0.75rem;
+  color: var(--ink-soft);
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.streak-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+
+.streak-card {
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.streak-value {
+  display: block;
+  color: var(--accent);
+  font-size: 1.55rem;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.streak-label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.streak-note {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.6;
+}
+
+.weekly-summary {
+  margin: 0.75rem 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.8;
+}
+
+.calendar {
+  margin-top: 1rem;
+  padding: 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.calendar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.calendar-month {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.calendar-nav {
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.calendar-nav:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.calendar-nav:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.calendar-weekdays,
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.25rem;
+}
+
+.calendar-weekdays {
+  margin-bottom: 0.25rem;
+  color: var(--muted);
+  font-size: 0.62rem;
+  text-align: center;
+}
+
+.calendar-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  min-height: 2.35rem;
+  padding: 0.2rem 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.calendar-day:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.calendar-day.is-empty {
+  visibility: hidden;
+}
+
+.calendar-day.is-future {
+  color: var(--muted);
+  opacity: 0.45;
+  cursor: default;
+}
+
+.calendar-day.is-today {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.calendar-day.is-today.is-complete {
+  box-shadow: inset 0 0 0 1px var(--accent-ink);
+}
+
+.calendar-day.is-selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.calendar-day.is-selected.is-complete {
+  outline-color: var(--accent-ink);
+}
+
+.calendar-day.is-complete {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.calendar-day.is-partial {
+  background: var(--accent-soft);
+}
+
+.calendar-dots {
+  display: flex;
+  gap: 2px;
+  height: 4px;
+}
+
+.calendar-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.3;
+}
+
+.calendar-dot.is-on {
+  opacity: 1;
+}
+
+.calendar-detail {
+  min-height: 1.2rem;
+  margin: 0.6rem 0 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.7;
+}
+
+.disclaimer {
+  margin: 1.75rem 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.9;
+}
+
+.reset {
+  margin-top: 1.5rem;
+  padding: 0.6rem 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.reset:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.reset.is-confirming {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* ===== 9. الوقت المتبقي والانتقال والإعدادات والتراجع ===== */
+.time-left {
+  margin: 0.3rem 0 0;
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.period-toolbar {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 0.75rem;
+}
+
+.next-button {
+  padding: 0.45rem 0.95rem;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.next-button:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.next-button:disabled {
+  border-color: var(--line);
+  color: var(--muted);
+  cursor: default;
+}
+
+.settings {
+  margin-top: 2rem;
+}
+
+.settings-title {
+  margin: 0 0 0.5rem;
+  color: var(--ink-soft);
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.setting-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+  padding-block: 0.65rem;
+  border-top: 1px solid var(--line);
+}
+
+.setting-label {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  padding: 0.2rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.segmented--themes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.2rem;
+  border-radius: 14px;
+}
+
+@media (min-width: 34rem) {
+  .segmented--themes {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.segment {
+  padding: 0.35rem 0.7rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.segment:hover {
+  color: var(--ink);
+}
+
+.segment[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.ghost-button {
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease, background-color 0.2s ease;
+}
+
+.ghost-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ghost-button.is-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.ghost-button.is-primary:hover {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.ghost-button.is-confirming {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.ghost-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.setting-note {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.8;
+}
+
+.setting-note.is-error {
+  color: var(--danger);
+}
+
+.backup-reminder {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.8;
+}
+
+.backup-reminder.is-warning {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.import-confirm {
+  margin-top: 0.75rem;
+  padding: 0.8rem;
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius);
+}
+
+.import-confirm[hidden] {
+  display: none;
+}
+
+.import-confirm .backup-actions {
+  margin-top: 0.6rem;
+}
+
+.undo-bar {
+  position: fixed;
+  inset-inline: 1rem;
+  bottom: 1rem;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: min(100% - 2rem, 28rem);
+  margin-inline: auto;
+  padding: 0.65rem 1rem;
+  border-radius: var(--radius);
+  background: var(--ink);
+  color: var(--bg);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+  font-size: 0.85rem;
+}
+
+.undo-bar[hidden] {
+  display: none;
+}
+
+.undo-bar span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.undo-bar button {
+  flex-shrink: 0;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.undo-bar button:hover {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+/* ===== 10. نافذة العدّاد ===== */
+body.is-dialog-open {
+  overflow: hidden;
+}
+
+.counter-dialog {
+  width: min(100% - 2rem, 26rem);
+  max-height: calc(100vh - 2rem);
+  padding: 1.15rem;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--ink);
+  overflow-y: auto;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+.counter-dialog::backdrop {
+  background: rgba(8, 12, 18, 0.65);
+  backdrop-filter: blur(3px);
+}
+
+.counter-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.counter-head h2 {
+  margin: 0;
+  font-family: var(--font-dua);
+  font-size: 1.3rem;
+  line-height: 1.4;
+}
+
+.counter-close {
+  flex-shrink: 0;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.counter-close:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.counter-text {
+  max-height: 34vh;
+  margin-top: 0.75rem;
+  padding-inline-end: 0.25rem;
+  overflow-y: auto;
+}
+
+.counter-text .ayah {
+  font-size: calc(1.25rem * var(--dua-scale));
+}
+
+.counter-text .dhikr-text {
+  font-size: calc(1.15rem * var(--dua-scale));
+}
+
+.counter-count {
+  margin: 1rem 0 0.35rem;
+  text-align: center;
+  font-size: 1.05rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.counter-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.counter-fill {
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+
+.counter-button {
+  display: block;
+  width: 100%;
+  min-height: 6rem;
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 0;
+  border-radius: 16px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: var(--font-ui);
+  font-size: 1.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.12s ease, opacity 0.2s ease;
+}
+
+.counter-button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.counter-button:disabled {
+  background: var(--accent-soft);
+  color: var(--accent);
+  cursor: default;
+}
+
+.counter-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.75rem;
+}
+
+/* ===== 11. أدوات مساعدة ===== */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ===== 11. الشاشات الصغيرة والحركة والطباعة ===== */
+@media (max-width: 30rem) {
+  .page {
+    width: min(100% - 1.25rem, var(--measure));
+  }
+
+  .period-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .dhikr {
+    grid-template-columns: 2.1rem minmax(0, 1fr);
+    column-gap: 0.8rem;
+  }
+
+  .dhikr-list::before {
+    inset-inline-start: 1.05rem;
+  }
+
+  .marker {
+    width: 1.75rem;
+    height: 1.75rem;
+    font-size: 0.72rem;
+  }
+
+  .ayah {
+    font-size: calc(1.3rem * var(--dua-scale));
+  }
+
+  .dhikr-text {
+    font-size: calc(1.22rem * var(--dua-scale));
+  }
+
+  .pill {
+    min-width: 5.75rem;
+  }
+
+  .calendar {
+    padding: 0.7rem;
+  }
+
+  .calendar-day {
+    min-height: 2.1rem;
+    font-size: 0.7rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  body::before,
+  .tabs-wrap,
+  .period-toolbar,
+  .time-left,
+  .dhikr-actions,
+  .settings,
+  .undo-bar,
+  .counter-dialog,
+  .site-footer .reset,
+  .insights {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+    color: #000;
+  }
+
+  .page {
+    width: 100%;
+  }
+
+  .marker {
+    border-color: #999;
+    background: #fff;
+    color: #000;
+  }
+
+  .dhikr {
+    break-inside: avoid;
+  }
+}
