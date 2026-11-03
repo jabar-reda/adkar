@@ -208,6 +208,19 @@ register("progress-fill", "div");
 register("next-incomplete", "button");
 register("dhikr-list", "ol");
 
+const supplementGroup = register("supplement-group", "section", { hidden: true });
+const supplementList = register("supplement-list", "ol");
+register("supplement-progress", "p");
+register("supplement-bar", "div");
+register("supplement-fill", "div");
+
+supplementGroup.append(
+  byId.get("supplement-progress"),
+  byId.get("supplement-bar"),
+  byId.get("supplement-fill"),
+  supplementList
+);
+
 panel.append(
   byId.get("period-title"),
   byId.get("period-hint"),
@@ -216,7 +229,8 @@ panel.append(
   byId.get("progress-bar"),
   byId.get("progress-fill"),
   byId.get("next-incomplete"),
-  byId.get("dhikr-list")
+  byId.get("dhikr-list"),
+  supplementGroup
 );
 
 const footer = make("footer", { className: "site-footer" });
@@ -442,6 +456,7 @@ const state = () => JSON.parse(storage.get("douaa-tracker.v1") || '{"days":{}}')
 
 const pill = (index) => list.children[index].querySelector(".pill");
 const resetItem = (index) => list.children[index].querySelector(".undo");
+const sleepPill = (index) => supplementList.children[index].querySelector(".pill");
 
 check("initial morning items = 16", list.children.length === 16, String(list.children.length));
 check(
@@ -1091,7 +1106,67 @@ async function runAsyncTests() {
         state().days["2026-10-31"].evening
     )
   );
+
+  /* أذكار النوم المكمّلة */
+  check(
+    "sleep group shows in the evening",
+    byId.get("supplement-group").hidden === false
+  );
+  check(
+    "sleep group has 10 items",
+    supplementList.children.length === 10,
+    String(supplementList.children.length)
+  );
+  check(
+    "evening tab still counts 18 base adhkar",
+    tabEvening.querySelector(".tab-count").textContent === "١٨ من ١٨",
+    tabEvening.querySelector(".tab-count").textContent
+  );
+  check(
+    "evening dot is not gold before sleep adhkar",
+    !todayCell().querySelectorAll(".calendar-dot")[1].classList.contains("is-gold")
+  );
+
+  for (let index = 0; index < supplementList.children.length; index += 1) {
+    for (let tap = 0; tap < 101; tap += 1) {
+      if (sleepPill(index).textContent === "تم ✓") break;
+      sleepPill(index).click();
+    }
+  }
+  check(
+    "sleep progress says all ten are done",
+    byId.get("supplement-progress").textContent === "أكملت أذكار النوم",
+    byId.get("supplement-progress").textContent
+  );
+  check(
+    "evening dot turns gold after sleep adhkar",
+    Boolean(todayCell().querySelectorAll(".calendar-dot")[1].classList.contains("is-gold")),
+    todayCell().querySelectorAll(".calendar-dot")[1].className
+  );
+  check(
+    "calendar detail counts sleep adhkar",
+    byId.get("calendar-detail").textContent.includes("أذكار النوم ١٠/١٠"),
+    byId.get("calendar-detail").textContent
+  );
+  check(
+    "sleep adhkar are stored separately",
+    Boolean(
+      state().days["2026-10-31"] &&
+        state().days["2026-10-31"].sleep &&
+        state().days["2026-10-31"].sleep["sleep-0"]
+    )
+  );
+  check(
+    "sleep adhkar do not change the streak",
+    byId.get("streak-current").textContent === "١",
+    byId.get("streak-current").textContent
+  );
+
   tabMorning.click();
+  check(
+    "sleep group hides on the morning tab",
+    byId.get("supplement-group").hidden === true
+  );
 
   /* إعادة تعيين اليوم */
   byId.get("reset-day").click();

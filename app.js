@@ -213,6 +213,80 @@
     },
   ];
 
+  /* ===== أذكار النوم (مكمّلة لأذكار المساء) ===== */
+  const SLEEP_ITEMS = [
+    {
+      title: "آخر آيتين من سورة البقرة",
+      count: 1,
+      ayah:
+        "آمَنَ الرَّسُولُ بِمَا أُنْزِلَ إِلَيْهِ مِنْ رَبِّهِ وَالْمُؤْمِنُونَ ۚ كُلٌّ آمَنَ بِاللَّهِ وَمَلَائِكَتِهِ وَكُتُبِهِ وَرُسُلِهِ لَا نُفَرِّقُ بَيْنَ أَحَدٍ مِنْ رُسُلِهِ ۚ وَقَالُوا سَمِعْنَا وَأَطَعْنَا ۖ غُفْرَانَكَ رَبَّنَا وَإِلَيْكَ الْمَصِيرُ ۝ لَا يُكَلِّفُ اللَّهُ نَفْسًا إِلَّا وُسْعَهَا ۚ لَهَا مَا كَسَبَتْ وَعَلَيْهَا مَا اكْتَسَبَتْ ۗ رَبَّنَا لَا تُؤَاخِذْنَا إِنْ نَسِينَا أَوْ أَخْطَأْنَا ۚ رَبَّنَا وَلَا تَحْمِلْ عَلَيْنَا إِصْرًا كَمَا حَمَلْتَهُ عَلَى الَّذِينَ مِنْ قَبْلِنَا ۚ رَبَّنَا وَلَا تُحَمِّلْنَا مَا لَا طَاقَةَ لَنَا بِهِ ۖ وَاعْفُ عَنَّا وَاغْفِرْ لَنَا وَارْحَمْنَا ۚ أَنْتَ مَوْلَانَا فَانْصُرْنَا عَلَى الْقَوْمِ الْكَافِرِينَ",
+      source: "البقرة: ٢٨٥-٢٨٦",
+    },
+    {
+      title: "باسمك اللهم أموت وأحيا",
+      count: 1,
+      lines: ["بِاسْمِكَ اللَّهُمَّ أَمُوتُ وَأَحْيَا."],
+      source: "البخاري ٦٣٢٤",
+    },
+    {
+      title: "اللهم أسلمت نفسي إليك",
+      count: 1,
+      lines: [
+        "اللَّهُمَّ أَسْلَمْتُ نَفْسِي إِلَيْكَ، وَوَجَّهْتُ وَجْهِي إِلَيْكَ، وَفَوَّضْتُ أَمْرِي إِلَيْكَ، وَأَلْجَأْتُ ظَهْرِي إِلَيْكَ، رَغْبَةً وَرَهْبَةً إِلَيْكَ، لَا مَلْجَأَ وَلَا مَنْجَا مِنْكَ إِلَّا إِلَيْكَ، آمَنْتُ بِكِتَابِكَ الَّذِي أَنْزَلْتَ، وَبِنَبِيِّكَ الَّذِي أَرْسَلْتَ.",
+      ],
+      note: "اجعله آخر ما تتكلم به قبل النوم.",
+      source: "البخاري ٢٤٧، مسلم ٢٧١٠",
+    },
+    {
+      title: "اللهم قني عذابك يوم تبعث عبادك",
+      count: 3,
+      lines: ["اللَّهُمَّ قِنِي عَذَابَكَ يَوْمَ تَبْعَثُ عِبَادَكَ."],
+      source: "أبو داود ٥٠٤٥",
+    },
+    {
+      title: "سبحان الله",
+      count: 33,
+      lines: ["سُبْحَانَ اللَّهِ."],
+      source: "البخاري ٦٣١٨، مسلم ٢٧٢٧",
+    },
+    {
+      title: "الحمد لله",
+      count: 33,
+      lines: ["الْحَمْدُ لِلَّهِ."],
+      source: "البخاري ٦٣١٨، مسلم ٢٧٢٧",
+    },
+    {
+      title: "الله أكبر",
+      count: 34,
+      lines: ["اللَّهُ أَكْبَرُ."],
+      source: "البخاري ٦٣١٨، مسلم ٢٧٢٧",
+    },
+    {
+      title: "باسمك ربي وضعت جنبي",
+      count: 1,
+      lines: [
+        "بِاسْمِكَ رَبِّي وَضَعْتُ جَنْبِي، وَبِكَ أَرْفَعُهُ، فَإِنْ أَمْسَكْتَ نَفْسِي فَارْحَمْهَا، وَإِنْ أَرْسَلْتَهَا فَاحْفَظْهَا بِمَا تَحْفَظُ بِهِ عِبَادَكَ الصَّالِحِينَ.",
+      ],
+      source: "البخاري ٦٣٢٠، مسلم ٢٧١٤",
+    },
+    {
+      title: "اللهم خلقت نفسي وأنت تتوفاها",
+      count: 1,
+      lines: [
+        "اللَّهُمَّ خَلَقْتَ نَفْسِي وَأَنْتَ تَوَفَّاهَا، لَكَ مَمَاتُهَا وَمَحْيَاهَا، إِنْ أَحْيَيْتَهَا فَاحْفَظْهَا، وَإِنْ أَمَتَّهَا فَاغْفِرْ لَهَا، اللَّهُمَّ إِنِّي أَسْأَلُكَ الْعَافِيَةَ.",
+      ],
+      source: "مسلم ٢٧١٢",
+    },
+    {
+      title: "الحمد لله الذي أطعمنا وسقانا وكفانا وآوانا",
+      count: 1,
+      lines: [
+        "الْحَمْدُ لِلَّهِ الَّذِي أَطْعَمَنَا وَسَقَانَا، وَكَفَانَا وَآوَانَا، فَكَمْ مِمَّنْ لَا كَافِيَ لَهُ وَلَا مُؤْوِيَ.",
+      ],
+      source: "أبو داود ٥٠٥٣",
+    },
+  ];
+
   const SECTIONS = {
     morning: {
       name: "أذكار الصباح",
@@ -225,6 +299,12 @@
       hint:
         "من بعد صلاة العصر إلى غروب الشمس، ويجوز الإتيان بها في أول الليل عند فوات ذلك.",
       items: EVENING_ITEMS,
+    },
+    sleep: {
+      name: "أذكار النوم",
+      hint:
+        "تُقال عند الفراش مباشرة، وهي مكمّلة لأذكار المساء ولا تُحتسب في اكتمالها.",
+      items: SLEEP_ITEMS,
     },
   };
 
@@ -239,7 +319,7 @@
 
   const itemKey = (period, index) => `${period}-${index}`;
 
-  const emptyDay = () => ({ morning: {}, evening: {} });
+  const emptyDay = () => ({ morning: {}, evening: {}, sleep: {} });
 
   const addDays = (date, amount) => {
     const next = new Date(date);
@@ -271,7 +351,7 @@
   function sanitizeDayRecord(source) {
     const day = emptyDay();
     if (!source || typeof source !== "object" || Array.isArray(source)) return day;
-    ["morning", "evening"].forEach((period) => {
+    Object.keys(SECTIONS).forEach((period) => {
       const record = source[period];
       if (!record || typeof record !== "object" || Array.isArray(record)) return;
       SECTIONS[period].items.forEach((item, index) => {
@@ -298,7 +378,7 @@
       .slice(-KEEP_DAYS);
     keys.forEach((key) => {
       const day = sanitizeDayRecord(rawDays[key]);
-      if (Object.keys(day.morning).length > 0 || Object.keys(day.evening).length > 0) {
+      if (Object.keys(SECTIONS).some((period) => Object.keys(day[period]).length > 0)) {
         days[key] = day;
       }
     });
@@ -341,6 +421,7 @@
     return {
       morning: day.morning || {},
       evening: day.evening || {},
+      sleep: day.sleep || {},
     };
   }
 
@@ -488,6 +569,11 @@
     counterButton: document.getElementById("counter-button"),
     counterClose: document.getElementById("counter-close"),
     counterReset: document.getElementById("counter-reset"),
+    supplementGroup: document.getElementById("supplement-group"),
+    supplementList: document.getElementById("supplement-list"),
+    supplementProgress: document.getElementById("supplement-progress"),
+    supplementBar: document.getElementById("supplement-bar"),
+    supplementFill: document.getElementById("supplement-fill"),
   };
 
   let settings = loadSettings();
@@ -502,6 +588,7 @@
   let touchStart = null;
   let insightsSignature = "";
   let previousDone = null;
+  let previousSleepDone = null;
   let calendarMonth = startOfMonth(new Date());
   let selectedCalendarKey = dayKey();
   let counterKey = null;
@@ -509,7 +596,9 @@
   let counterResetArmed = false;
   let counterResetTimer = null;
   let celebrationTimer = null;
+  let sleepCelebrationTimer = null;
   let pendingCelebration = null;
+  let pendingSleepCelebration = false;
 
   /* ===== التاريخ ===== */
   function formatGregorian(date) {
@@ -752,6 +841,15 @@
       ...section.items.map((item, index) => createItem(period, item, index))
     );
 
+    const isEvening = period === "evening";
+    elements.supplementGroup.hidden = !isEvening;
+    elements.supplementList.replaceChildren();
+    if (isEvening) {
+      elements.supplementList.replaceChildren(
+        ...SECTIONS.sleep.items.map((item, index) => createItem("sleep", item, index))
+      );
+    }
+
     elements.tabs.forEach((tab) => {
       const selected = tab.dataset.period === period;
       tab.setAttribute("aria-selected", String(selected));
@@ -759,6 +857,7 @@
     });
 
     previousDone = countCompleted(period);
+    previousSleepDone = countCompleted("sleep");
     insightsSignature = "";
     updateProgress();
     updateTimeLeft();
@@ -801,13 +900,28 @@
 
     updateTabTitle(section, done, total);
 
-    const signature = `${countCompleted("morning")}:${countCompleted("evening")}`;
+    const sleepTotal = SECTIONS.sleep.items.length;
+    const sleepDone = countCompleted("sleep");
+    elements.supplementProgress.textContent =
+      sleepDone === sleepTotal
+        ? "أكملت أذكار النوم"
+        : `أكملت ${toArabicNumber(sleepDone)} من ${toArabicNumber(sleepTotal)}`;
+    elements.supplementFill.style.width = `${(sleepDone / sleepTotal) * 100}%`;
+    elements.supplementBar.setAttribute("aria-valuenow", String(sleepDone));
+    elements.supplementBar.setAttribute("aria-valuemax", String(sleepTotal));
+
+    const justCompletedSleep =
+      previousSleepDone !== null && sleepDone === sleepTotal && previousSleepDone < sleepTotal;
+    previousSleepDone = sleepDone;
+
+    const signature = `${countCompleted("morning")}:${countCompleted("evening")}:${sleepDone}`;
     if (signature !== insightsSignature) {
       insightsSignature = signature;
       renderInsights();
     }
 
     if (justCompleted) celebrate(section);
+    if (justCompletedSleep) celebrateSleep();
   }
 
   /* ===== التقدم: السلسلة والملخص والتقويم ===== */
@@ -871,16 +985,19 @@
     return summary;
   }
 
-  function calendarDot(isOn) {
+  function calendarDot(isOn, isGold = false) {
     const dot = document.createElement("span");
-    dot.className = "calendar-dot" + (isOn ? " is-on" : "");
+    dot.className =
+      "calendar-dot" + (isOn ? " is-on" : "") + (isGold ? " is-gold" : "");
     return dot;
   }
 
-  function calendarDayLabel(date, morningDone, eveningDone, isFuture) {
+  function calendarDayLabel(date, morningDone, eveningDone, sleepDone, isFuture) {
     const status = isFuture
       ? "لم يأت بعد"
-      : `الصباح ${morningDone ? "مكتمل" : "غير مكتمل"}، المساء ${eveningDone ? "مكتمل" : "غير مكتمل"}`;
+      : `الصباح ${morningDone ? "مكتمل" : "غير مكتمل"}، المساء ${
+          eveningDone ? "مكتمل" : "غير مكتمل"
+        }، أذكار النوم ${sleepDone ? "مكتملة" : "غير مكتملة"}`;
     return `${formatWeekday(date)} ${toArabicNumber(date.getDate())} ${formatMonthLabel(date)}: ${status}`;
   }
 
@@ -902,10 +1019,12 @@
     }
     const morningDone = countCompleted("morning", key);
     const eveningDone = countCompleted("evening", key);
+    const sleepDone = countCompleted("sleep", key);
     elements.calendarDetail.textContent =
       `${formatWeekday(date)} ${toArabicNumber(date.getDate())} ${formatMonthLabel(date)} — ` +
       `الصباح ${toArabicNumber(morningDone)}/${toArabicNumber(SECTIONS.morning.items.length)}، ` +
-      `المساء ${toArabicNumber(eveningDone)}/${toArabicNumber(SECTIONS.evening.items.length)}.`;
+      `المساء ${toArabicNumber(eveningDone)}/${toArabicNumber(SECTIONS.evening.items.length)}، ` +
+      `أذكار النوم ${toArabicNumber(sleepDone)}/${toArabicNumber(SECTIONS.sleep.items.length)}.`;
   }
 
   function renderCalendar() {
@@ -941,6 +1060,7 @@
       const isFuture = key > todayKey;
       const morningDone = isSectionComplete("morning", key);
       const eveningDone = isSectionComplete("evening", key);
+      const sleepDone = isSectionComplete("sleep", key);
       const bothDone = morningDone && eveningDone;
       const partial = (morningDone || eveningDone) && !bothDone;
 
@@ -954,7 +1074,10 @@
       else if (partial) cell.classList.add("is-partial");
       cell.dataset.key = key;
       cell.disabled = isFuture;
-      cell.setAttribute("aria-label", calendarDayLabel(date, morningDone, eveningDone, isFuture));
+      cell.setAttribute(
+        "aria-label",
+        calendarDayLabel(date, morningDone, eveningDone, sleepDone, isFuture)
+      );
       cell.setAttribute("aria-pressed", String(key === selectedCalendarKey));
 
       const number = document.createElement("span");
@@ -963,7 +1086,7 @@
       const dots = document.createElement("span");
       dots.className = "calendar-dots";
       dots.setAttribute("aria-hidden", "true");
-      dots.append(calendarDot(morningDone), calendarDot(eveningDone));
+      dots.append(calendarDot(morningDone), calendarDot(eveningDone, sleepDone));
 
       cell.append(number, dots);
       cell.addEventListener("click", () => {
@@ -1010,6 +1133,21 @@
       elements.progressBar.classList.remove("is-celebrating");
     }, 1200);
     announce(`أكملت ${section.name} كاملة`);
+  }
+
+  function celebrateSleep() {
+    if (elements.counterDialog && elements.counterDialog.open) {
+      pendingSleepCelebration = true;
+      return;
+    }
+    elements.supplementBar.classList.remove("is-celebrating");
+    void elements.supplementBar.offsetWidth;
+    elements.supplementBar.classList.add("is-celebrating");
+    clearTimeout(sleepCelebrationTimer);
+    sleepCelebrationTimer = setTimeout(() => {
+      elements.supplementBar.classList.remove("is-celebrating");
+    }, 1200);
+    announce("أكملت أذكار النوم — أصبح يومك ذهبياً");
   }
 
   /* ===== العدّاد الكبير ===== */
@@ -1061,7 +1199,10 @@
   }
 
   function closeCounter(options = {}) {
-    if (options.celebratePending === false) pendingCelebration = null;
+    if (options.celebratePending === false) {
+      pendingCelebration = null;
+      pendingSleepCelebration = false;
+    }
     if (!elements.counterDialog || !elements.counterDialog.open) return;
     elements.counterDialog.close();
   }
@@ -1116,6 +1257,11 @@
       const section = pendingCelebration;
       pendingCelebration = null;
       celebrate(section);
+    }
+
+    if (pendingSleepCelebration) {
+      pendingSleepCelebration = false;
+      celebrateSleep();
     }
   });
 
@@ -1391,6 +1537,7 @@
         "أذكار الصباح المكتملة",
         "اكتمل المساء",
         "أذكار المساء المكتملة",
+        "أذكار النوم المكتملة",
         "اكتمل اليوم",
       ],
     ];
@@ -1398,6 +1545,7 @@
     keys.forEach((key) => {
       const morningDone = countCompleted("morning", key);
       const eveningDone = countCompleted("evening", key);
+      const sleepDone = countCompleted("sleep", key);
       const morningComplete = isSectionComplete("morning", key);
       const eveningComplete = isSectionComplete("evening", key);
       rows.push([
@@ -1406,6 +1554,7 @@
         `${morningDone}/${SECTIONS.morning.items.length}`,
         eveningComplete ? "نعم" : "لا",
         `${eveningDone}/${SECTIONS.evening.items.length}`,
+        `${sleepDone}/${SECTIONS.sleep.items.length}`,
         morningComplete && eveningComplete ? "نعم" : "لا",
       ]);
     });
@@ -1476,7 +1625,7 @@
   function mergeDayRecords(currentDay, importedDay) {
     const merged = emptyDay();
 
-    ["morning", "evening"].forEach((period) => {
+    Object.keys(SECTIONS).forEach((period) => {
       const currentRecord = currentDay[period] || {};
       const importedRecord = importedDay[period] || {};
 
