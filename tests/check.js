@@ -9,6 +9,8 @@ const html = read("index.html");
 const app = read("app.js");
 const themeInit = read("theme-init.js");
 const css = read("styles.css");
+const faviconSvg = read("favicon.svg");
+const faviconIco = fs.readFileSync(path.join(root, "favicon.ico"));
 const sim = fs.readFileSync(path.join(__dirname, "sim.js"), "utf8");
 
 let failed = false;
@@ -61,6 +63,44 @@ if (html.indexOf("theme-init.js") < html.indexOf('href="styles.css"')) {
 } else {
   fail("theme-init.js should load before the stylesheet");
 }
+
+/* ===== الأيقونة ===== */
+[
+  ['href="favicon.svg"', "favicon.svg"],
+  ['href="favicon.ico"', "favicon.ico"],
+].forEach(([needle, name]) => {
+  if (html.includes(needle)) pass(`index.html links ${name}`);
+  else fail(`index.html does not link ${name}`);
+});
+
+if (/viewBox="0 0 32 32"/.test(faviconSvg)) pass("favicon.svg has a 32px viewBox");
+else fail("favicon.svg is missing the 32px viewBox");
+
+if (/<title[\s>]/.test(faviconSvg)) pass("favicon.svg has a title");
+else fail("favicon.svg is missing a title");
+
+if (/<script|<image|href="http/i.test(faviconSvg)) {
+  fail("favicon.svg contains a script, raster image or external reference");
+} else {
+  pass("favicon.svg is self-contained vector artwork");
+}
+
+const icoHeaderOk =
+  faviconIco.length > 6 &&
+  faviconIco[0] === 0 &&
+  faviconIco[1] === 0 &&
+  faviconIco[2] === 1 &&
+  faviconIco[3] === 0;
+if (icoHeaderOk) pass("favicon.ico has a valid ICO header");
+else fail("favicon.ico has an invalid ICO header");
+
+const icoCount = icoHeaderOk ? faviconIco.readUInt16LE(4) : 0;
+if (icoCount === 3) pass("favicon.ico contains 3 image sizes");
+else fail(`favicon.ico contains ${icoCount} image sizes instead of 3`);
+
+const icoSizes = Array.from({ length: icoCount }, (_, index) => faviconIco[6 + index * 16]);
+if (icoSizes.join(",") === "16,32,48") pass("favicon.ico sizes are 16, 32 and 48");
+else fail(`favicon.ico sizes are ${icoSizes.join(", ")}`);
 
 /* ===== المعرّفات ===== */
 const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
