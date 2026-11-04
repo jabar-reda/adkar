@@ -210,11 +210,15 @@ register("dhikr-list", "ol");
 
 const supplementGroup = register("supplement-group", "section", { hidden: true });
 const supplementList = register("supplement-list", "ol");
+register("supplement-title", "h2");
+register("supplement-note", "p");
 register("supplement-progress", "p");
 register("supplement-bar", "div");
 register("supplement-fill", "div");
 
 supplementGroup.append(
+  byId.get("supplement-title"),
+  byId.get("supplement-note"),
   byId.get("supplement-progress"),
   byId.get("supplement-bar"),
   byId.get("supplement-fill"),
@@ -804,8 +808,11 @@ async function runAsyncTests() {
   );
   check(
     "CSV has Arabic headers",
-    typeof csv === "string" && csv.includes("التاريخ") && csv.includes("اكتمل اليوم"),
-    typeof csv === "string" ? csv.slice(0, 80) : String(csv)
+    typeof csv === "string" &&
+      csv.includes("التاريخ") &&
+      csv.includes("اكتمل اليوم") &&
+      csv.includes("أذكار الاستيقاظ المكتملة"),
+    typeof csv === "string" ? csv.slice(0, 120) : String(csv)
   );
   check(
     "CSV contains valid days and counts",
@@ -1064,6 +1071,66 @@ async function runAsyncTests() {
     todayCell() ? todayCell().className : "missing"
   );
 
+  /* أذكار الاستيقاظ المكمّلة */
+  check(
+    "wake group shows in the morning",
+    supplementGroup.hidden === false
+  );
+  check(
+    "wake title names the group",
+    byId.get("supplement-title").textContent === "أذكار الاستيقاظ",
+    byId.get("supplement-title").textContent
+  );
+  check(
+    "wake group has 5 items",
+    supplementList.children.length === 5,
+    String(supplementList.children.length)
+  );
+  check(
+    "morning tab still counts 16 base adhkar",
+    tabMorning.querySelector(".tab-count").textContent === "١٦ من ١٦",
+    tabMorning.querySelector(".tab-count").textContent
+  );
+  check(
+    "morning dot is not gold before wake adhkar",
+    !todayCell().querySelectorAll(".calendar-dot")[0].classList.contains("is-gold")
+  );
+
+  for (let index = 0; index < supplementList.children.length; index += 1) {
+    for (let tap = 0; tap < 101; tap += 1) {
+      if (sleepPill(index).textContent === "تم ✓") break;
+      sleepPill(index).click();
+    }
+  }
+  check(
+    "wake progress says all five are done",
+    byId.get("supplement-progress").textContent === "أكملت أذكار الاستيقاظ",
+    byId.get("supplement-progress").textContent
+  );
+  check(
+    "morning dot turns gold after wake adhkar",
+    Boolean(todayCell().querySelectorAll(".calendar-dot")[0].classList.contains("is-gold")),
+    todayCell().querySelectorAll(".calendar-dot")[0].className
+  );
+  check(
+    "calendar detail counts wake adhkar",
+    byId.get("calendar-detail").textContent.includes("أذكار الاستيقاظ ٥/٥"),
+    byId.get("calendar-detail").textContent
+  );
+  check(
+    "wake adhkar are stored separately",
+    Boolean(
+      state().days["2026-10-31"] &&
+        state().days["2026-10-31"].wake &&
+        state().days["2026-10-31"].wake["wake-0"]
+    )
+  );
+  check(
+    "wake adhkar do not change the streak",
+    byId.get("streak-current").textContent === "٠",
+    byId.get("streak-current").textContent
+  );
+
   /* إكمال المساء ليكتمل اليوم */
   tabEvening.click();
   for (let index = 0; index < list.children.length; index += 1) {
@@ -1113,6 +1180,11 @@ async function runAsyncTests() {
     byId.get("supplement-group").hidden === false
   );
   check(
+    "sleep title names the group",
+    byId.get("supplement-title").textContent === "أذكار النوم",
+    byId.get("supplement-title").textContent
+  );
+  check(
     "sleep group has 10 items",
     supplementList.children.length === 10,
     String(supplementList.children.length)
@@ -1144,6 +1216,11 @@ async function runAsyncTests() {
     todayCell().querySelectorAll(".calendar-dot")[1].className
   );
   check(
+    "morning dot stays gold after sleep adhkar",
+    Boolean(todayCell().querySelectorAll(".calendar-dot")[0].classList.contains("is-gold")),
+    todayCell().querySelectorAll(".calendar-dot")[0].className
+  );
+  check(
     "calendar detail counts sleep adhkar",
     byId.get("calendar-detail").textContent.includes("أذكار النوم ١٠/١٠"),
     byId.get("calendar-detail").textContent
@@ -1164,8 +1241,15 @@ async function runAsyncTests() {
 
   tabMorning.click();
   check(
-    "sleep group hides on the morning tab",
-    byId.get("supplement-group").hidden === true
+    "morning tab shows the wake group again",
+    byId.get("supplement-group").hidden === false &&
+      byId.get("supplement-title").textContent === "أذكار الاستيقاظ",
+    byId.get("supplement-title").textContent
+  );
+  check(
+    "wake progress stays complete",
+    byId.get("supplement-progress").textContent === "أكملت أذكار الاستيقاظ",
+    byId.get("supplement-progress").textContent
   );
 
   /* إعادة تعيين اليوم */
@@ -1177,6 +1261,11 @@ async function runAsyncTests() {
   );
   byId.get("reset-day").click();
   check("reset clears today", pill(0).textContent !== "تم ✓", pill(0).textContent);
+  check(
+    "reset clears the gold dots",
+    !todayCell().querySelectorAll(".calendar-dot")[0].classList.contains("is-gold") &&
+      !todayCell().querySelectorAll(".calendar-dot")[1].classList.contains("is-gold")
+  );
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
