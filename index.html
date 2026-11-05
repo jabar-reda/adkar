@@ -8,6 +8,11 @@
 
   <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0d6a4d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="أذكار">
 
   <script src="theme-init.js"></script>
 
@@ -206,6 +211,14 @@
             <button type="button" class="ghost-button" id="import-cancel">إلغاء</button>
           </div>
         </div>
+
+        <div class="setting-row">
+          <span class="setting-label">تثبيت التطبيق</span>
+          <button type="button" class="ghost-button" id="install-app" hidden>
+            تثبيت التطبيق
+          </button>
+        </div>
+        <p class="setting-note" id="install-note" role="status"></p>
       </section>
 
       <p class="disclaimer">
@@ -240,6 +253,7 @@
 
   <p class="sr-only" id="live" aria-live="polite"></p>
 
+  <script src="pwa.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
