@@ -887,6 +887,15 @@ body::before {
   margin-top: 0.75rem;
 }
 
+.storage-warning {
+  margin: 0.75rem 0 0;
+  padding-inline-start: 0.7rem;
+  border-inline-start: 3px solid var(--danger);
+  color: var(--danger);
+  font-size: 0.82rem;
+  line-height: 1.8;
+}
+
 .next-button {
   padding: 0.45rem 0.95rem;
   border: 1px solid var(--accent);

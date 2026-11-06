@@ -1,11 +1,12 @@
 // Service Worker: يخزّن ملفات التطبيق ليعمل بدون إنترنت بعد أول زيارة.
 // ارفع CACHE_NAME عند تغيير قائمة SHELL_FILES حتى يُستبدل الكاش القديم.
-const CACHE_NAME = "douaa-tracker-shell-v1";
+const CACHE_NAME = "douaa-tracker-shell-v2";
 
 const SHELL_FILES = [
   "./",
   "index.html",
   "styles.css",
+  "config.js",
   "theme-init.js",
   "app.js",
   "pwa.js",

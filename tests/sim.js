@@ -3,6 +3,7 @@ const path = require("path");
 const vm = require("vm");
 
 const root = path.join(__dirname, "..");
+const config = fs.readFileSync(path.join(root, "config.js"), "utf8");
 const themeInit = fs.readFileSync(path.join(root, "theme-init.js"), "utf8");
 const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
 
@@ -72,6 +73,9 @@ class Element {
   }
   getAttribute(name) {
     return this.attributes[name];
+  }
+  hasAttribute(name) {
+    return Object.prototype.hasOwnProperty.call(this.attributes, name);
   }
   addEventListener(type, handler) {
     if (!this.listeners[type]) this.listeners[type] = [];
@@ -207,6 +211,7 @@ register("progress-bar", "div");
 register("progress-fill", "div");
 register("next-incomplete", "button");
 register("dhikr-list", "ol");
+register("storage-warning", "p", { hidden: true });
 
 const supplementGroup = register("supplement-group", "section", { hidden: true });
 const supplementList = register("supplement-list", "ol");
@@ -234,6 +239,7 @@ panel.append(
   byId.get("progress-fill"),
   byId.get("next-incomplete"),
   byId.get("dhikr-list"),
+  byId.get("storage-warning"),
   supplementGroup
 );
 
@@ -429,9 +435,19 @@ sandbox.window.innerWidth = 400;
 sandbox.window.matchMedia = () => ({ matches: false });
 sandbox.window.getSelection = () => "";
 
+const windowListeners = new Map();
+sandbox.addEventListener = (type, handler) => {
+  if (!windowListeners.has(type)) windowListeners.set(type, []);
+  windowListeners.get(type).push(handler);
+};
+function dispatchWindowEvent(type, event) {
+  (windowListeners.get(type) || []).forEach((handler) => handler(event));
+}
+
 vm.createContext(sandbox);
 
 /* ===== تشغيل سكربتات الصفحة ===== */
+vm.runInContext(config, sandbox);
 vm.runInContext(themeInit, sandbox);
 vm.runInContext(app, sandbox);
 
@@ -1265,6 +1281,46 @@ async function runAsyncTests() {
     "reset clears the gold dots",
     !todayCell().querySelectorAll(".calendar-dot")[0].classList.contains("is-gold") &&
       !todayCell().querySelectorAll(".calendar-dot")[1].classList.contains("is-gold")
+  );
+
+  /* تحذير التخزين عند تعذّر الحفظ */
+  const realSetItem = localStorage.setItem;
+  localStorage.setItem = () => {
+    throw new Error("quota exceeded");
+  };
+  pill(0).click();
+  check(
+    "a failed save shows the storage warning",
+    byId.get("storage-warning").hidden === false
+  );
+
+  localStorage.setItem = realSetItem;
+  resetItem(0).click();
+  check(
+    "a successful save hides the storage warning",
+    byId.get("storage-warning").hidden === true
+  );
+
+  /* المزامنة بين التبويبات */
+  storage.set(
+    "douaa-tracker.v1",
+    JSON.stringify({
+      days: { "2026-10-31": { morning: { "morning-0": { count: 1, done: true } } } },
+    })
+  );
+  dispatchWindowEvent("storage", { key: "douaa-tracker.v1" });
+  check(
+    "a storage event reloads progress from another tab",
+    pill(0).textContent === "تم ✓",
+    pill(0).textContent
+  );
+
+  storage.set("douaa-tracker.settings.v1", JSON.stringify({ fontSize: "large", theme: "auto" }));
+  dispatchWindowEvent("storage", { key: "douaa-tracker.settings.v1" });
+  check(
+    "a storage event applies settings from another tab",
+    document.documentElement.dataset.fontSize === "large",
+    document.documentElement.dataset.fontSize
   );
 
   console.log(`\n${passed} passed, ${failed} failed`);

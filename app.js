@@ -2,19 +2,20 @@
   "use strict";
 
   /* ===== الثوابت ===== */
-  const STORAGE_KEY = "douaa-tracker.v1";
-  const SETTINGS_KEY = "douaa-tracker.settings.v1";
+  // تُعرّف القيم المشتركة مع theme-init.js في config.js المحمّل قبل هذا الملف.
+  const CONFIG = window.DOUAA_CONFIG;
+  if (!CONFIG) throw new Error("config.js must load before app.js");
+
+  const STORAGE_KEY = CONFIG.storageKeys.state;
+  const SETTINGS_KEY = CONFIG.storageKeys.settings;
   const KEEP_DAYS = 60;
   const MAX_BACKUP_BYTES = 2 * 1024 * 1024;
   const BACKUP_REMINDER_DAYS = 14;
   const ARABIC_DIGITS = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
-  const FONT_SIZES = ["small", "medium", "large", "xlarge"];
-  const THEMES = ["auto", "time", "morning", "evening"];
+  const FONT_SIZES = CONFIG.fontSizes;
+  const THEMES = CONFIG.themes;
   const DEFAULT_SETTINGS = { fontSize: "medium", theme: "auto", lastExportAt: null };
-  const PERIOD_WINDOWS = {
-    morning: { start: 4, end: 15 },
-    evening: { start: 15, end: 4 },
-  };
+  const PERIOD_WINDOWS = CONFIG.periodWindows;
 
   /* ===== الأذكار المشتركة بين الصباح والمساء ===== */
   const DHIKR = {
@@ -469,11 +470,24 @@
     }
   }
 
+  function reportStorageState(saved) {
+    const warning = elements.storageWarning;
+    if (!warning) return;
+    warning.hidden = saved;
+    if (!saved && !storageWarningShown) {
+      storageWarningShown = true;
+      announce("تعذّر حفظ التقدم على هذا الجهاز");
+    }
+  }
+
   function saveState() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      reportStorageState(true);
     } catch (error) {
-      // التخزين قد يكون معطلاً (وضع التصفح الخاص) — يبقى التطبيق يعمل في الذاكرة.
+      // التخزين قد يكون معطلاً (وضع التصفح الخاص) — يبقى التطبيق يعمل في الذاكرة،
+      // لكن نُظهر تحذيراً لأن التقدم لن يبقى بعد إغلاق الصفحة.
+      reportStorageState(false);
     }
   }
 
@@ -597,6 +611,7 @@
     progressText: document.getElementById("progress-text"),
     progressBar: document.getElementById("progress-bar"),
     progressFill: document.getElementById("progress-fill"),
+    storageWarning: document.getElementById("storage-warning"),
     reset: document.getElementById("reset-day"),
     gregDate: document.getElementById("date-greg"),
     hijriDate: document.getElementById("date-hijri"),
@@ -671,33 +686,45 @@
   let supplementCelebrationTimer = null;
   let pendingCelebration = null;
   let pendingSupplementCelebration = null;
+  let storageWarningShown = false;
 
   /* ===== التاريخ ===== */
-  function formatGregorian(date) {
+  // إنشاء Intl.DateTimeFormat مكلف، لذا ننشئ كل منسّق مرة واحدة بدل مرة لكل خلية تقويم.
+  function createDateFormatter(locale, options) {
     try {
-      return new Intl.DateTimeFormat("ar", {
-        weekday: "long",
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      }).format(date);
+      return new Intl.DateTimeFormat(locale, options);
     } catch (error) {
-      return date.toLocaleDateString();
+      return null;
     }
   }
 
+  const formatters = {
+    gregorian: createDateFormatter("ar", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }),
+    hijri: createDateFormatter("ar-SA-u-ca-islamic-umalqura", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }),
+    weekday: createDateFormatter("ar", { weekday: "long" }),
+    month: createDateFormatter("ar", { month: "long", year: "numeric" }),
+    backupDate: createDateFormatter("ar", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }),
+  };
+
+  function formatGregorian(date) {
+    return formatters.gregorian ? formatters.gregorian.format(date) : date.toLocaleDateString();
+  }
+
   function formatHijri(date) {
-    try {
-      return (
-        new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura", {
-          day: "numeric",
-          month: "long",
-          year: "numeric",
-        }).format(date) + "هـ"
-      );
-    } catch (error) {
-      return "";
-    }
+    return formatters.hijri ? `${formatters.hijri.format(date)}هـ` : "";
   }
 
   function updateDates() {
@@ -948,7 +975,12 @@
   function updateProgress() {
     const section = SECTIONS[activePeriod];
     const total = section.items.length;
-    const done = countCompleted(activePeriod);
+    // نحسب عدّادات الأقسام مرة واحدة، لأن كل استدعاء لـ countCompleted يمر على كل الأذكار.
+    const counts = {};
+    Object.keys(SECTIONS).forEach((period) => {
+      counts[period] = countCompleted(period);
+    });
+    const done = counts[activePeriod];
     const justCompleted = previousDone !== null && done === total && previousDone < total;
     previousDone = done;
 
@@ -969,7 +1001,7 @@
     elements.tabs.forEach((tab) => {
       const period = tab.dataset.period;
       const periodTotal = SECTIONS[period].items.length;
-      const periodDone = countCompleted(period);
+      const periodDone = counts[period];
       tab.querySelector(".tab-count").textContent =
         `${toArabicNumber(periodDone)} من ${toArabicNumber(periodTotal)}`;
     });
@@ -981,7 +1013,7 @@
 
     if (supplement) {
       const supplementTotal = SECTIONS[supplement.period].items.length;
-      const supplementDone = countCompleted(supplement.period);
+      const supplementDone = counts[supplement.period];
       elements.supplementProgress.textContent =
         supplementDone === supplementTotal
           ? `أكملت ${supplement.name}`
@@ -998,9 +1030,7 @@
       previousSupplementDone = supplementDone;
     }
 
-    const signature = `${countCompleted("morning")}:${countCompleted("evening")}:${countCompleted(
-      "wake"
-    )}:${countCompleted("sleep")}`;
+    const signature = `${counts.morning}:${counts.evening}:${counts.wake}:${counts.sleep}`;
     if (signature !== insightsSignature) {
       insightsSignature = signature;
       renderInsights();
@@ -1012,19 +1042,13 @@
 
   /* ===== التقدم: السلسلة والملخص والتقويم ===== */
   function formatWeekday(date) {
-    try {
-      return new Intl.DateTimeFormat("ar", { weekday: "long" }).format(date);
-    } catch (error) {
-      return "";
-    }
+    return formatters.weekday ? formatters.weekday.format(date) : "";
   }
 
   function formatMonthLabel(date) {
-    try {
-      return new Intl.DateTimeFormat("ar", { month: "long", year: "numeric" }).format(date);
-    } catch (error) {
-      return `${date.getMonth() + 1}/${date.getFullYear()}`;
-    }
+    return formatters.month
+      ? formatters.month.format(date)
+      : `${date.getMonth() + 1}/${date.getFullYear()}`;
   }
 
   function getCurrentStreak() {
@@ -1293,13 +1317,45 @@
     elements.counterButton.focus({ preventScroll: true });
   }
 
+  function handleCounterClosed() {
+    document.body.classList.remove("is-dialog-open");
+    counterKey = null;
+    disarmCounterReset();
+
+    const opener = counterOpener;
+    counterOpener = null;
+    if (opener && opener.isConnected) opener.focus({ preventScroll: true });
+
+    if (pendingCelebration) {
+      const section = pendingCelebration;
+      pendingCelebration = null;
+      celebrate(section);
+    }
+
+    if (pendingSupplementCelebration) {
+      const supplement = pendingSupplementCelebration;
+      pendingSupplementCelebration = null;
+      celebrateSupplement(supplement);
+    }
+  }
+
   function closeCounter(options = {}) {
     if (options.celebratePending === false) {
       pendingCelebration = null;
       pendingSupplementCelebration = null;
     }
-    if (!elements.counterDialog || !elements.counterDialog.open) return;
-    elements.counterDialog.close();
+    const dialog = elements.counterDialog;
+    const isOpen = dialog && (dialog.open === true || dialog.hasAttribute("open"));
+    if (!isOpen) return;
+
+    if (typeof dialog.close === "function") {
+      dialog.close();
+      return;
+    }
+
+    // متصفحات قديمة لا تدعم <dialog>: نزيل السمة وننفّذ نفس التنظيف يدوياً.
+    dialog.removeAttribute("open");
+    handleCounterClosed();
   }
 
   elements.counterButton.addEventListener("click", () => {
@@ -1339,27 +1395,7 @@
   elements.counterDialog.addEventListener("click", (event) => {
     if (event.target === elements.counterDialog) closeCounter();
   });
-  elements.counterDialog.addEventListener("close", () => {
-    document.body.classList.remove("is-dialog-open");
-    counterKey = null;
-    disarmCounterReset();
-
-    const opener = counterOpener;
-    counterOpener = null;
-    if (opener && opener.isConnected) opener.focus({ preventScroll: true });
-
-    if (pendingCelebration) {
-      const section = pendingCelebration;
-      pendingCelebration = null;
-      celebrate(section);
-    }
-
-    if (pendingSupplementCelebration) {
-      const supplement = pendingSupplementCelebration;
-      pendingSupplementCelebration = null;
-      celebrateSupplement(supplement);
-    }
-  });
+  elements.counterDialog.addEventListener("close", handleCounterClosed);
 
   /* ===== الإعلانات لقارئ الشاشة ===== */
   function announce(message) {
@@ -1541,15 +1577,8 @@
 
   function formatBackupDate(key) {
     const [year, month, day] = key.split("-").map(Number);
-    try {
-      return new Intl.DateTimeFormat("ar", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      }).format(new Date(year, month - 1, day));
-    } catch (error) {
-      return key;
-    }
+    if (!formatters.backupDate) return key;
+    return formatters.backupDate.format(new Date(year, month - 1, day));
   }
 
   function validateBackup(raw) {
@@ -1981,6 +2010,44 @@
     updateTimeLeft();
     refreshClockTheme();
   }, 30000);
+
+  /* ===== المزامنة بين التبويبات ===== */
+  function reloadStateFromStorage() {
+    state = loadState();
+    renderedDay = dayKey();
+    selectedCalendarKey = renderedDay;
+    calendarMonth = startOfMonth(new Date());
+    updateDates();
+    renderPeriod(activePeriod);
+    updateBackupReminder();
+  }
+
+  window.addEventListener("storage", (event) => {
+    // مسح التخزين من تبويب آخر يصل بحدث مفتاحه null.
+    if (event.key === null) {
+      settings = loadSettings();
+      applyFontSize();
+      applyTheme();
+      syncSettingsUI();
+      reloadStateFromStorage();
+      announce("تم تحديث البيانات من تبويب آخر");
+      return;
+    }
+
+    if (event.key === STORAGE_KEY) {
+      reloadStateFromStorage();
+      announce("تم تحديث التقدم من تبويب آخر");
+      return;
+    }
+
+    if (event.key === SETTINGS_KEY) {
+      settings = loadSettings();
+      applyFontSize();
+      applyTheme();
+      syncSettingsUI();
+      updateBackupReminder();
+    }
+  });
 
   /* ===== بدء التشغيل ===== */
   syncSettingsUI();

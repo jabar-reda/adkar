@@ -56,6 +56,7 @@ else pass("index.html has no inline script");
 
 [
   ['<link rel="stylesheet" href="styles.css">', "styles.css"],
+  ['<script src="config.js"></script>', "config.js"],
   ['<script src="theme-init.js"></script>', "theme-init.js"],
   ['<script src="pwa.js"></script>', "pwa.js"],
   ['<script src="app.js"></script>', "app.js"],
@@ -70,6 +71,18 @@ if (html.indexOf("theme-init.js") < html.indexOf('href="styles.css"')) {
   pass("theme-init.js loads before the stylesheet");
 } else {
   fail("theme-init.js should load before the stylesheet");
+}
+
+if (html.indexOf("config.js") < html.indexOf("theme-init.js")) {
+  pass("config.js loads before theme-init.js");
+} else {
+  fail("config.js must load before theme-init.js");
+}
+
+if (/window\.DOUAA_CONFIG/.test(app) && /window\.DOUAA_CONFIG/.test(themeInit)) {
+  pass("app.js and theme-init.js share window.DOUAA_CONFIG");
+} else {
+  fail("app.js and theme-init.js must read the shared config");
 }
 
 /* ===== الأيقونة ===== */
@@ -255,6 +268,7 @@ else missingShell.forEach((file) => fail(`sw.js precaches a missing file: ${file
 const requiredShell = [
   "index.html",
   "styles.css",
+  "config.js",
   "theme-init.js",
   "app.js",
   "pwa.js",

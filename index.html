@@ -14,6 +14,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="أذكار">
 
+  <script src="config.js"></script>
   <script src="theme-init.js"></script>
 
   <link rel="stylesheet" href="styles.css">
@@ -83,6 +84,10 @@
         <div class="period-toolbar">
           <button type="button" class="next-button" id="next-incomplete">التالي — بقي ١٦</button>
         </div>
+        <p class="storage-warning" id="storage-warning" role="status" hidden>
+          تعذّر حفظ التقدم على هذا الجهاز. قد تكون المساحة ممتلئة أو أنك تستخدم تصفحاً خاصاً؛
+          سيبقى تقدمك ظاهراً حتى إغلاق الصفحة.
+        </p>
       </section>
 
       <ol class="dhikr-list" id="dhikr-list" role="tabpanel" aria-labelledby="tab-morning"></ol>
