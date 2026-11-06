@@ -1,0 +1,9 @@
+{
+  "name": "douaa-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "متابعة يومية لأذكار الصباح والمساء، بدون خادم أو مكتبات خارجية.",
+  "scripts": {
+    "test": "node tests/run.js"
+  }
+}

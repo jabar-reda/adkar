@@ -4,8 +4,16 @@ const vm = require("vm");
 
 const source = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
 const ORIGIN = "https://example.com";
-const CACHE_NAME = "douaa-tracker-shell-v1";
-const OLD_CACHE_NAME = "douaa-tracker-shell-v0";
+
+// نقرأ اسم الكاش وقائمة الملفات من المصدر حتى لا تتعطل الاختبارات عند رفع النسخة.
+const cacheMatch = source.match(/const CACHE_NAME = "(douaa-tracker-shell-v(\d+))";/);
+const CACHE_NAME = cacheMatch ? cacheMatch[1] : "douaa-tracker-shell-v1";
+const OLD_CACHE_NAME = cacheMatch
+  ? `douaa-tracker-shell-v${Math.max(0, Number(cacheMatch[2]) - 1)}`
+  : "douaa-tracker-shell-v0";
+
+const shellMatch = source.match(/const SHELL_FILES = \[([\s\S]*?)\];/);
+const SHELL_COUNT = shellMatch ? [...shellMatch[1].matchAll(/"([^"]+)"/g)].length : 0;
 
 let passed = 0;
 let failed = 0;
@@ -133,7 +141,7 @@ function fontRequest() {
 async function main() {
   const environment = createEnvironment();
   await environment.runLifecycle("install");
-  check("install caches the whole shell", environment.cacheStore.size === 21);
+  check("install caches the whole shell", environment.cacheStore.size === SHELL_COUNT);
   check("install activates the new worker immediately", environment.didSkipWaiting() === true);
 
   await environment.runLifecycle("activate");
