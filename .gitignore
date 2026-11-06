@@ -11,3 +11,6 @@ desktop.ini
 # ملفات مؤقتة
 *.tmp
 *.log
+
+# ملفات مضغوطة
+douaa-tracker.zip
