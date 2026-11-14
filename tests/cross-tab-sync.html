@@ -48,9 +48,12 @@
 
       try {
         await Promise.all(loaded);
+        // لا نعتمد على الساعة المحلية للمتصفح؛ نختار الصباح صراحةً في السياقين.
+        frames[0].contentDocument.getElementById("tab-morning").click();
+        frames[1].contentDocument.getElementById("tab-morning").click();
         const first = frames[0].contentDocument.querySelectorAll("#dhikr-list .pill")[0];
         const second = frames[1].contentDocument.querySelectorAll("#dhikr-list .pill")[1];
-        if (!first || !second) throw new Error("لم يتم العثور على أزرار الأذكار في الإطارين.");
+        if (!first || !second) throw new Error("لم يتم العثور على أزرار أذكار الصباح في الإطارين.");
 
         // عمليتا الكتابة تصدران من نسختين منفصلتين من التطبيق.
         first.click();
