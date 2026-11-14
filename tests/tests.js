@@ -747,6 +747,7 @@ check(
   document.title
 );
 check("progress saved to storage", Boolean(state().days["2026-10-31"]));
+check("progress storage uses schema version 2", state().schemaVersion === 2, String(state().schemaVersion));
 check("undo bar visible", undoBar.hidden === false);
 check("undo text mentions title", undoText.textContent.includes("آية الكرسي"), undoText.textContent);
 undoButton.click();
