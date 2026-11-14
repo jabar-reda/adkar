@@ -28,7 +28,16 @@
         return;
       }
 
-      // صفحة الاختبار مخصصة للتشغيل اليدوي؛ امسح بيانات التقدم قبل فتح الإطارين.
+      // نحفظ تقدم المستخدم ونستعيده بعد الاختبار؛ لا نترك التخزين التجريبي مكانه.
+      const originalProgress = localStorage.getItem("adkar.v1");
+      let restored = false;
+      const restoreProgress = () => {
+        if (restored) return;
+        restored = true;
+        if (originalProgress === null) localStorage.removeItem("adkar.v1");
+        else localStorage.setItem("adkar.v1", originalProgress);
+      };
+      window.addEventListener("pagehide", restoreProgress, { once: true });
       localStorage.removeItem("adkar.v1");
       const frames = [...document.querySelectorAll("iframe")];
       const loaded = frames.map((frame) => new Promise((resolve, reject) => {
@@ -68,6 +77,10 @@
       } catch (error) {
         output.textContent = error.message;
         output.dataset.result = "failed";
+      } finally {
+        // نمنح عمليات القفل القصيرة فرصة للانتهاء قبل إعادة بيانات المستخدم.
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        restoreProgress();
       }
     })();
   </script>
