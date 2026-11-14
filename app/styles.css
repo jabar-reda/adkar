@@ -1024,6 +1024,16 @@ body::before {
   gap: 0.4rem;
 }
 
+/* حقل اختيار ملف النسخة الاحتياطية: مخفي بصرياً فقط. صفة hidden
+   (display:none) تمنع بعض متصفحات الويب في الهاتف من فتح نافذة
+   اختيار الملف عند برمجة النقر عليه، بينما يبقى الحقل قابلاً للنقر هنا. */
+.file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
 .ghost-button {
   padding: 0.45rem 0.9rem;
   border: 1px solid var(--line);
