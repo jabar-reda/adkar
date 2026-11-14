@@ -1543,7 +1543,8 @@ async function runAsyncTests() {
   dispatchWindowEvent("storage", { key: "adkar.v1" });
   // الترحيل يحدث في الذاكرة أولاً؛ احفظ تغييراً عادياً في قسم الصباح.
   tabMorning.click();
-  pill(0).click();
+  if (pill(2).textContent === "تم ✓") resetItem(2).click();
+  else pill(2).click();
   check(
     "legacy positional keys migrate to explicit IDs",
     state().days["2026-10-20"].morning[itemKeys.morning0].count === 1
