@@ -18,6 +18,7 @@
   const SETTINGS_KEY = CONFIG.storageKeys.settings;
   // نحتفظ بآخر 60 يوماً من التقدم فقط حتى لا يتضخم التخزين بلا نهاية.
   const KEEP_DAYS = 60;
+  const STATE_SCHEMA_VERSION = 2;
   // حد حجم ملف النسخة الاحتياطية المقبول عند الاستيراد (2 ميغابايت).
   const MAX_BACKUP_BYTES = 2 * 1024 * 1024;
   // نذكّر المستخدم بتصدير نسخة احتياطية كل أسبوعين.
@@ -34,6 +35,7 @@
   // زر عدّاد، و0 = بلا عدد محدد فيصير زر التسجيل «إنهاء» بلا عدّاد.
   const DHIKR = {
     ayatKursi: {
+      id: "ayat-al-kursi",
       title: "آية الكرسي",
       count: 1,
       basmala: true,
@@ -42,6 +44,7 @@
       source: "البقرة: ٢٥٥",
     },
     ikhlas: {
+      id: "surah-al-ikhlas",
       title: "سورة الإخلاص",
       count: 3,
       basmala: true,
@@ -49,6 +52,7 @@
         "قُلْ هُوَ اللَّهُ أَحَدٌ ۝ اللَّهُ الصَّمَدُ ۝ لَمْ يَلِدْ وَلَمْ يُولَدْ ۝ وَلَمْ يَكُنْ لَهُ كُفُوًا أَحَدٌ",
     },
     falaq: {
+      id: "surah-al-falaq",
       title: "سورة الفلق",
       count: 3,
       basmala: true,
@@ -56,6 +60,7 @@
         "قُلْ أَعُوذُ بِرَبِّ الْفَلَقِ ۝ مِنْ شَرِّ مَا خَلَقَ ۝ وَمِنْ شَرِّ غَاسِقٍ إِذَا وَقَبَ ۝ وَمِنْ شَرِّ النَّفَّاثَاتِ فِي الْعُقَدِ ۝ وَمِنْ شَرِّ حَاسِدٍ إِذَا حَسَدَ",
     },
     nas: {
+      id: "surah-an-nas",
       title: "سورة الناس",
       count: 3,
       basmala: true,
@@ -63,6 +68,7 @@
         "قُلْ أَعُوذُ بِرَبِّ النَّاسِ ۝ مَلِكِ النَّاسِ ۝ إِلَٰهِ النَّاسِ ۝ مِنْ شَرِّ الْوَسْوَاسِ الْخَنَّاسِ ۝ الَّذِي يُوَسْوِسُ فِي صُدُورِ النَّاسِ ۝ مِنَ الْجِنَّةِ وَالنَّاسِ",
     },
     sayyidAlIstighfar: {
+      id: "sayyid-al-istighfar",
       title: "سيد الاستغفار",
       count: 1,
       lines: [
@@ -70,6 +76,7 @@
       ],
     },
     raditu: {
+      id: "raditu-billahi-rabban",
       title: "رضيت بالله ربًّا",
       count: 3,
       lines: [
@@ -77,6 +84,7 @@
       ],
     },
     bismillah: {
+      id: "bismillah-alladhi-la-yadurr",
       title: "بسم الله الذي لا يضر",
       count: 3,
       lines: [
@@ -84,6 +92,7 @@
       ],
     },
     afiyah: {
+      id: "dua-al-afiyah",
       title: "اللهم إني أسألك العفو والعافية",
       count: 1,
       lines: [
@@ -91,6 +100,7 @@
       ],
     },
     alimAlGhayb: {
+      id: "dua-alim-al-ghayb",
       title: "اللهم عالم الغيب والشهادة",
       count: 1,
       lines: [
@@ -98,6 +108,7 @@
       ],
     },
     yaHayyu: {
+      id: "ya-hayyu-ya-qayyum",
       title: "يا حي يا قيوم",
       count: 1,
       lines: [
@@ -105,11 +116,13 @@
       ],
     },
     subhanAllah: {
+      id: "subhan-allah-wa-bihamdih",
       title: "سبحان الله وبحمده",
       count: 100,
       lines: ["سُبْحَانَ اللَّهِ وَبِحَمْدِهِ."],
     },
     istighfar: {
+      id: "astaghfirullah-wa-atubu",
       title: "أستغفر الله وأتوب إليه",
       count: 0,
       lines: ["أَسْتَغْفِرُ اللَّهَ وَأَتُوبُ إِلَيْهِ."],
@@ -123,6 +136,7 @@
     DHIKR.falaq,
     DHIKR.nas,
     {
+      id: "morning-opening",
       title: "أصبحنا وأصبح الملك لله",
       count: 1,
       lines: [
@@ -132,6 +146,7 @@
       ],
     },
     {
+      id: "morning-by-you",
       title: "اللهم بك أصبحنا",
       count: 1,
       lines: [
@@ -142,6 +157,7 @@
     DHIKR.raditu,
     DHIKR.bismillah,
     {
+      id: "morning-blessing",
       title: "اللهم ما أصبح بي من نعمة",
       count: 1,
       lines: [
@@ -152,6 +168,7 @@
     DHIKR.alimAlGhayb,
     DHIKR.yaHayyu,
     {
+      id: "morning-fitrah",
       title: "أصبحنا على فطرة الإسلام",
       count: 1,
       lines: [
@@ -169,6 +186,7 @@
   /* ===== أذكار الاستيقاظ (مكمّلة لأذكار الصباح) ===== */
   const WAKE_ITEMS = [
     {
+      id: "wake-after-sleep",
       title: "الحمد لله الذي أحيانا بعد ما أماتنا",
       count: 1,
       lines: [
@@ -177,6 +195,7 @@
       source: "البخاري ٦٣١٢، مسلم ٢٧١١",
     },
     {
+      id: "wake-health",
       title: "الحمد لله الذي عافاني في جسدي",
       count: 1,
       lines: [
@@ -185,6 +204,7 @@
       source: "الترمذي ٣٤٠١",
     },
     {
+      id: "wake-tawhid",
       title: "لا إله إلا الله وحده لا شريك له",
       count: 1,
       lines: [
@@ -194,6 +214,7 @@
       source: "البخاري ١١٥٤، أبو داود ٥٠٦٠",
     },
     {
+      id: "wake-al-wahid",
       title: "لا إله إلا الله الواحد القهار",
       count: 1,
       lines: [
@@ -203,6 +224,7 @@
       source: "النسائي في السنن الكبرى ١٠٦٣٤",
     },
     {
+      id: "wake-protection",
       title: "أعوذ بكلمات الله التامات",
       count: 1,
       lines: [
@@ -220,6 +242,7 @@
     DHIKR.falaq,
     DHIKR.nas,
     {
+      id: "evening-opening",
       title: "أمسينا وأمسى الملك لله",
       count: 1,
       lines: [
@@ -229,6 +252,7 @@
       ],
     },
     {
+      id: "evening-by-you",
       title: "اللهم بك أمسينا",
       count: 1,
       lines: [
@@ -239,6 +263,7 @@
     DHIKR.raditu,
     DHIKR.bismillah,
     {
+      id: "evening-blessing",
       title: "اللهم ما أمسى بي من نعمة",
       count: 1,
       lines: [
@@ -249,6 +274,7 @@
     DHIKR.alimAlGhayb,
     DHIKR.yaHayyu,
     {
+      id: "evening-fitrah",
       title: "أمسينا على فطرة الإسلام",
       count: 1,
       lines: [
@@ -257,6 +283,7 @@
     },
     DHIKR.subhanAllah,
     {
+      id: "evening-protection",
       title: "أعوذ بكلمات الله التامات من شر ما خلق",
       count: 3,
       lines: ["أَعُوذُ بِكَلِمَاتِ اللَّهِ التَّامَّاتِ مِنْ شَرِّ مَا خَلَقَ."],
@@ -267,6 +294,7 @@
         "يُستحب الإكثار من الاستغفار، ولا يلزم عدد محدد لهذا اللفظ في أذكار المساء.",
     },
     {
+      id: "dua-protection-from-fire",
       title: "اللهم أجرني من النار",
       count: 0,
       lines: ["اللَّهُمَّ أَجِرْنِي مِنَ النَّارِ."],
@@ -278,6 +306,7 @@
   /* ===== أذكار النوم (مكمّلة لأذكار المساء) ===== */
   const SLEEP_ITEMS = [
     {
+      id: "last-two-baqarah",
       title: "آخر آيتين من سورة البقرة",
       count: 1,
       ayah:
@@ -285,12 +314,14 @@
       source: "البقرة: ٢٨٥-٢٨٦",
     },
     {
+      id: "sleep-in-your-name",
       title: "باسمك اللهم أموت وأحيا",
       count: 1,
       lines: ["بِاسْمِكَ اللَّهُمَّ أَمُوتُ وَأَحْيَا."],
       source: "البخاري ٦٣٢٤",
     },
     {
+      id: "sleep-surrender",
       title: "اللهم أسلمت نفسي إليك",
       count: 1,
       lines: [
@@ -300,30 +331,35 @@
       source: "البخاري ٢٤٧، مسلم ٢٧١٠",
     },
     {
+      id: "sleep-protection",
       title: "اللهم قني عذابك يوم تبعث عبادك",
       count: 3,
       lines: ["اللَّهُمَّ قِنِي عَذَابَكَ يَوْمَ تَبْعَثُ عِبَادَكَ."],
       source: "أبو داود ٥٠٤٥",
     },
     {
+      id: "sleep-subhan-allah",
       title: "سبحان الله",
       count: 33,
       lines: ["سُبْحَانَ اللَّهِ."],
       source: "البخاري ٦٣١٨، مسلم ٢٧٢٧",
     },
     {
+      id: "sleep-alhamdulillah",
       title: "الحمد لله",
       count: 33,
       lines: ["الْحَمْدُ لِلَّهِ."],
       source: "البخاري ٦٣١٨، مسلم ٢٧٢٧",
     },
     {
+      id: "sleep-allahu-akbar",
       title: "الله أكبر",
       count: 34,
       lines: ["اللَّهُ أَكْبَرُ."],
       source: "البخاري ٦٣١٨، مسلم ٢٧٢٧",
     },
     {
+      id: "sleep-placed-my-side",
       title: "باسمك ربي وضعت جنبي",
       count: 1,
       lines: [
@@ -332,6 +368,7 @@
       source: "البخاري ٦٣٢٠، مسلم ٢٧١٤",
     },
     {
+      id: "sleep-my-soul",
       title: "اللهم خلقت نفسي وأنت تتوفاها",
       count: 1,
       lines: [
@@ -340,6 +377,7 @@
       source: "مسلم ٢٧١٢",
     },
     {
+      id: "sleep-gratitude",
       title: "الحمد لله الذي أطعمنا وسقانا وكفانا وآوانا",
       count: 1,
       lines: [
@@ -405,8 +443,44 @@
   const dayKey = (date = new Date()) =>
     `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 
-  // مفتاح فريد لكل ذكر داخل قسمه: "morning-0" مثلاً، وهو نفسه مفتاح التخزين.
-  const itemKey = (period, index) => `${period}-${index}`;
+  // الهوية الصريحة لا تعتمد على العنوان أو موضع الذكر؛ غيّرها فقط عند إضافة ذكر جديد.
+  const stableItemId = (item) => item.id;
+  const itemKey = (period, item) => period + "-" + stableItemId(item);
+  // مفاتيح الإصدارات السابقة تُقرأ مرة واحدة ثم تُحفظ بالهوية الصريحة.
+  function previousTitleKey(period, item) {
+    const source = String(item.title || "untitled").normalize("NFKC").trim();
+    let hash = 2166136261;
+    for (let index = 0; index < source.length; index += 1) {
+      hash ^= source.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return period + "-" + (hash >>> 0).toString(36);
+  }
+  const legacyItemKey = (period, index) => period + "-" + index;
+  const sanitizeStats = (raw) => {
+    const best = Number(raw && raw.bestStreak);
+    const current = Number(raw && raw.currentStreak);
+    const date = raw && typeof raw.currentStreakDate === "string" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(raw.currentStreakDate) &&
+      isRealDateKey(raw.currentStreakDate) && raw.currentStreakDate <= dayKey()
+      ? raw.currentStreakDate
+      : null;
+    return {
+      bestStreak: Number.isFinite(best) ? Math.max(0, Math.floor(best)) : 0,
+      currentStreak: date && Number.isFinite(current) ? Math.max(0, Math.floor(current)) : 0,
+      currentStreakDate: date,
+    };
+  };
+
+  function mergeStats(...sources) {
+    const values = sources.map(sanitizeStats);
+    const bestStreak = Math.max(0, ...values.map((value) => value.bestStreak));
+    const latestDate = values.map((value) => value.currentStreakDate).filter(Boolean).sort().slice(-1)[0] || null;
+    const currentStreak = latestDate
+      ? Math.max(0, ...values.filter((value) => value.currentStreakDate === latestDate).map((value) => value.currentStreak))
+      : 0;
+    return { bestStreak, currentStreak, currentStreakDate: latestDate };
+  }
 
   // بنية يوم فارغ لكل الأقسام الأربعة، تُستخدم كأساس آمن للقراءة والكتابة.
   const emptyDay = () => ({ morning: {}, evening: {}, wake: {}, sleep: {} });
@@ -450,14 +524,16 @@
       const record = source[period];
       if (!record || typeof record !== "object" || Array.isArray(record)) return;
       SECTIONS[period].items.forEach((item, index) => {
-        const entry = record[itemKey(period, index)];
+        const key = itemKey(period, item);
+        // نقرأ المفتاح القديم أثناء الترحيل فقط، ثم نحفظ الهوية الجديدة.
+        const entry = record[key] || record[previousTitleKey(period, item)] || record[legacyItemKey(period, index)];
         if (!entry || typeof entry !== "object" || Array.isArray(entry)) return;
         if (item.count === 0) {
-          day[period][itemKey(period, index)] = { count: 0, done: Boolean(entry.done) };
+          day[period][key] = { count: 0, done: Boolean(entry.done) };
           return;
         }
         const count = Math.max(0, Math.min(item.count, Math.floor(Number(entry.count) || 0)));
-        day[period][itemKey(period, index)] = { count, done: count >= item.count };
+        day[period][key] = { count, done: count >= item.count };
       });
     });
     return day;
@@ -465,65 +541,157 @@
 
   // يرشّح مفاتيح الأيام: تاريخ حقيقي بصيغة صحيحة لا لاحق لليوم،
   // ويبقي أحدث KEEP_DAYS يوماً فقط، ويحذف الأيام الفارغة تماماً.
+  function hasValidStoredShape(parsed) {
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) ||
+        !parsed.days || typeof parsed.days !== "object" || Array.isArray(parsed.days)) return false;
+    for (const [date, day] of Object.entries(parsed.days)) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !isRealDateKey(date)) return false;
+      if (!day || typeof day !== "object" || Array.isArray(day)) return false;
+      for (const period of Object.keys(SECTIONS)) {
+        if (day[period] === undefined) continue;
+        const record = day[period];
+        if (!record || typeof record !== "object" || Array.isArray(record)) return false;
+        for (const entry of Object.values(record)) {
+          if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+          if (entry.count !== undefined && (!Number.isFinite(Number(entry.count)) || Number(entry.count) < 0)) return false;
+          if (entry.done !== undefined && typeof entry.done !== "boolean") return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  function isSanitizedDayComplete(day) {
+    return ["morning", "evening"].every((period) =>
+      SECTIONS[period].items.every((item) => isItemComplete(item, day[period][itemKey(period, item)]))
+    );
+  }
+
   function sanitizeDays(rawDays) {
     const days = {};
     if (!rawDays || typeof rawDays !== "object" || Array.isArray(rawDays)) return days;
     const today = dayKey();
-    const keys = Object.keys(rawDays)
+    const yesterday = dayKey(addDays(new Date(), -1));
+    const candidates = Object.keys(rawDays)
       .filter((key) => /^\d{4}-\d{2}-\d{2}$/.test(key) && isRealDateKey(key) && key <= today)
       .sort()
-      .slice(-KEEP_DAYS);
-    keys.forEach((key) => {
+      .slice(-(KEEP_DAYS + 1));
+    const sanitized = {};
+    candidates.forEach((key) => {
       const day = sanitizeDayRecord(rawDays[key]);
-      if (Object.keys(SECTIONS).some((period) => Object.keys(day[period]).length > 0)) {
-        days[key] = day;
-      }
+      if (Object.keys(SECTIONS).some((period) => Object.keys(day[period]).length > 0)) sanitized[key] = day;
+    });
+    // نحتفظ بيوم إضافي مؤقتاً إذا كان اليوم قيد الإنجاز والأمس مكتملاً.
+    const preserveStreakBridge = Boolean(
+      sanitized[today] && !isSanitizedDayComplete(sanitized[today]) &&
+      sanitized[yesterday] && isSanitizedDayComplete(sanitized[yesterday])
+    );
+    const selected = candidates.slice(-(KEEP_DAYS + (preserveStreakBridge ? 1 : 0)));
+    selected.forEach((key) => {
+      if (sanitized[key]) days[key] = sanitized[key];
     });
     return days;
   }
 
-  // قراءة كل التقدم من التخزين؛ أي خلل في البيانات يعني البدء من صفر
-  // بدل تعطل الصفحة، لأن البيانات هنا تأتي من متصفح المستخدم نفسه.
+  // لا نعامل البيانات التالفة كحالة فارغة؛ نوقف الكتابة كي لا نمحو الأصل.
   function loadState() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return { days: {} };
-
+      if (!raw) return { schemaVersion: STATE_SCHEMA_VERSION, days: {}, stats: { bestStreak: 0 } };
       const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || typeof parsed.days !== "object" || parsed.days === null) {
-        return { days: {} };
+      if (!hasValidStoredShape(parsed)) {
+        storageLoadIssue = "بيانات التقدم المخزنة تالفة أو غير متوافقة. أوقفنا الحفظ التلقائي حفاظاً عليها.";
+        storageBlocked = true;
+        return { schemaVersion: STATE_SCHEMA_VERSION, days: {}, stats: { bestStreak: 0 } };
       }
-      return { days: sanitizeDays(parsed.days) };
+      if (Number(parsed.schemaVersion || 1) > STATE_SCHEMA_VERSION) {
+        storageLoadIssue = "بيانات التقدم من إصدار أحدث. حدّث التطبيق قبل تعديلها حتى لا تفقد بياناتك.";
+        storageBlocked = true;
+        return { schemaVersion: STATE_SCHEMA_VERSION, days: {}, stats: { bestStreak: 0 } };
+      }
+      return { schemaVersion: STATE_SCHEMA_VERSION, days: sanitizeDays(parsed.days), stats: sanitizeStats(parsed.stats) };
     } catch (error) {
-      return { days: {} };
+      storageLoadIssue = error && error.name === "SecurityError"
+        ? "المتصفح منع الوصول إلى التخزين المحلي. لن نحاول الكتابة حتى يصبح التخزين متاحاً."
+        : "تعذّرت قراءة بيانات التقدم المخزنة. أوقفنا الحفظ التلقائي حتى لا تُستبدل البيانات التالفة.";
+      storageBlocked = true;
+      return { schemaVersion: STATE_SCHEMA_VERSION, days: {}, stats: { bestStreak: 0 } };
     }
   }
 
   function reportStorageState(saved) {
     const warning = elements.storageWarning;
     if (!warning) return;
+    if (!saved) warning.textContent = storageLoadIssue || "تعذّر حفظ التقدم على هذا الجهاز؛ سيبقى التقدم في الذاكرة حتى إغلاق الصفحة.";
     warning.hidden = saved;
     if (!saved && !storageWarningShown) {
       storageWarningShown = true;
-      announce("تعذّر حفظ التقدم على هذا الجهاز");
+      announce(storageLoadIssue || "تعذّر حفظ التقدم على هذا الجهاز");
     }
   }
 
   function saveState() {
+    if (storageBlocked) { reportStorageState(false); return false; }
+    state.schemaVersion = STATE_SCHEMA_VERSION;
+    updateStreakStats();
+    state.stats = sanitizeStats(state.stats);
+    state.stats.bestStreak = Math.max(state.stats.bestStreak, getBestStreak());
+    const localSnapshot = JSON.parse(JSON.stringify(state));
+    // يجب التقاط قاعدة الدمج عند طلب القفل، لا عند تنفيذه؛ فقد تصل storage event
+    // أثناء انتظار القفل وتحدّث lastPersistedState قبل دور هذه العملية.
+    const baseSnapshot = JSON.parse(JSON.stringify(lastPersistedState || {
+      schemaVersion: STATE_SCHEMA_VERSION,
+      days: {},
+      stats: { bestStreak: 0 },
+    }));
+
+    // Web Locks يجعل القراءة والدمج والكتابة عملية متسلسلة بين التبويبات.
+    // من دونه لا توجد primitive ذرية في localStorage تضمن منع stale overwrite.
+    if (typeof navigator !== "undefined" && navigator.locks && typeof navigator.locks.request === "function") {
+      navigator.locks.request("adkar-progress-write", { mode: "exclusive" }, () => {
+        if (storageBlocked) return;
+        const raw = localStorage.getItem(STORAGE_KEY);
+        const remote = parseStateSnapshot(raw);
+        if (!remote) {
+          storageBlocked = true;
+          storageLoadIssue = "بيانات التقدم المخزنة تغيّرت إلى بنية تالفة أثناء المزامنة. أوقفنا الكتابة حفاظاً عليها.";
+          reportStorageState(false);
+          return;
+        }
+        const merged = mergeConcurrentState(baseSnapshot, localSnapshot, remote);
+        state = merged;
+        updateStreakStats();
+        state.stats.bestStreak = Math.max(state.stats.bestStreak, getBestStreak());
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        lastPersistedState = JSON.parse(JSON.stringify(state));
+        reportStorageState(true);
+      }).catch(() => {
+        storageLoadIssue = "تعذّر حفظ التقدم داخل قفل المزامنة. بقي التقدم في الذاكرة ولم نكتب فوق البيانات.";
+        reportStorageState(false);
+      });
+      return true;
+    }
+
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(localSnapshot));
+      lastPersistedState = JSON.parse(JSON.stringify(localSnapshot));
       reportStorageState(true);
+      return true;
     } catch (error) {
-      // التخزين قد يكون معطلاً (وضع التصفح الخاص) — يبقى التطبيق يعمل في الذاكرة،
-      // لكن نُظهر تحذيراً لأن التقدم لن يبقى بعد إغلاق الصفحة.
       reportStorageState(false);
+      return false;
     }
   }
 
-  // حذف الأيام الأقدم بعد الحفظ حتى لا يتجاوز المخزون KEEP_DAYS يوماً.
+  // نحدّث إحصاءات السلسلة قبل التقليم، ونحتفظ بجسر يوم إضافي حتى يكتمل يوم اليوم.
   function pruneDays() {
+    updateStreakStats();
+    const today = dayKey();
+    const yesterday = dayKey(addDays(new Date(), -1));
+    const preserveStreakBridge = !isDayComplete(today) && isDayComplete(yesterday);
+    const limit = KEEP_DAYS + (preserveStreakBridge ? 1 : 0);
     const keys = Object.keys(state.days).sort();
-    while (keys.length > KEEP_DAYS) {
+    while (keys.length > limit) {
       delete state.days[keys.shift()];
     }
   }
@@ -567,7 +735,7 @@
     const record = getDay(key)[period];
     return SECTIONS[period].items.reduce(
       (total, item, index) =>
-        isItemComplete(item, record[itemKey(period, index)]) ? total + 1 : total,
+        isItemComplete(item, record[itemKey(period, item)]) ? total + 1 : total,
       0
     );
   }
@@ -705,8 +873,12 @@
 
   // الإعدادات والحالة تُقرأ من التخزين مرة واحدة عند الإقلاع، وما بعدها
   // حالة واجهة مؤقتة: خرائط أدوات التحكم، مؤقتات، ومؤشرات لاحظناها.
+  let storageBlocked = false;
+  let storageLoadIssue = null;
   let settings = loadSettings();
   let state = loadState();
+  // آخر نسخة نعرف أنها حُفظت؛ تُستخدم كقاعدة دمج داخل قفل الكتابة بين التبويبات.
+  let lastPersistedState = JSON.parse(JSON.stringify(state));
   let activePeriod = "morning";
   let renderedDay = dayKey();
   let itemControllers = new Map(); // مفتاح الذكر -> أدوات تحكم بطاقته
@@ -832,7 +1004,7 @@
      يعدّلان الحالة ويسجلان إجراءً قابلاً للتراجع. تُجمع المؤشرات في
      itemControllers لتبقى مفاتيح التراجع والعدّاد تعمل بعد أي إعادة رسم. */
   function createItem(period, item, index) {
-    const key = itemKey(period, index);
+    const key = itemKey(period, item);
     const saved = getEntry(period, key);
     const progress = {
       count: Number(saved && saved.count) || 0,
@@ -1118,17 +1290,52 @@
   // السلسلة الحالية: نبدأ من اليوم إن كان مكتملاً وإلا من الأمس
   // (ليستسع اليوم الجاري دون أن يقطع سلسلة الأمس)، ثم نعدّ الأيام
   // المكتملة المتتالية إلى الوراء حتى أول انقطاع.
-  function getCurrentStreak() {
-    let cursor = new Date();
-    if (!isDayComplete(dayKey(cursor))) cursor = addDays(cursor, -1);
-
+  function getStreakEndingAt(endKey) {
+    let cursor = parseDateKey(endKey);
     let streak = 0;
-    for (let index = 0; index < KEEP_DAYS; index += 1) {
+    for (let index = 0; index < KEEP_DAYS + 1; index += 1) {
       if (!isDayComplete(dayKey(cursor))) break;
       streak += 1;
       cursor = addDays(cursor, -1);
     }
     return streak;
+  }
+
+  function updateStreakStats() {
+    const stats = sanitizeStats(state.stats);
+    const today = dayKey();
+    const yesterday = dayKey(addDays(new Date(), -1));
+    if (isDayComplete(today)) {
+      if (stats.currentStreakDate !== today) {
+        const previousStreak = isDayComplete(yesterday)
+          ? (stats.currentStreakDate === yesterday ? stats.currentStreak : getStreakEndingAt(yesterday))
+          : 0;
+        stats.currentStreak = previousStreak + 1;
+        stats.currentStreakDate = today;
+      }
+      state.stats = stats;
+      stats.bestStreak = Math.max(stats.bestStreak, stats.currentStreak, getBestStreak());
+    } else if (stats.currentStreakDate === today) {
+      if (isDayComplete(yesterday)) {
+        stats.currentStreak = Math.max(0, stats.currentStreak - 1);
+        stats.currentStreakDate = yesterday;
+      } else {
+        stats.currentStreak = 0;
+        stats.currentStreakDate = null;
+      }
+    }
+    state.stats = stats;
+  }
+
+  function getCurrentStreak() {
+    const today = dayKey();
+    const yesterday = dayKey(addDays(new Date(), -1));
+    const stats = sanitizeStats(state.stats);
+    if (stats.currentStreakDate === today && isDayComplete(today)) return stats.currentStreak;
+    if (stats.currentStreakDate === yesterday && isDayComplete(yesterday)) return stats.currentStreak;
+    let cursor = new Date();
+    if (!isDayComplete(today)) cursor = addDays(cursor, -1);
+    return getStreakEndingAt(dayKey(cursor));
   }
 
   // أفضل سلسلة: نمرّ على أيام التخزين المرتبة ونعيد أبعد امتداد
@@ -1138,18 +1345,13 @@
     let best = 0;
     let run = 0;
     let previous = null;
-
     keys.forEach((key) => {
-      if (!isDayComplete(key)) {
-        run = 0;
-        previous = key;
-        return;
-      }
+      if (!isDayComplete(key)) { run = 0; previous = key; return; }
       run = previous && dayDifference(previous, key) === 1 ? run + 1 : 1;
       previous = key;
-      if (run > best) best = run;
+      best = Math.max(best, run);
     });
-    return best;
+    return Math.max(best, sanitizeStats(state.stats).bestStreak);
   }
 
   function getWeekSummary() {
@@ -1550,11 +1752,11 @@
     const section = SECTIONS[activePeriod];
     const record = getDay(dayKey())[activePeriod];
     const index = section.items.findIndex(
-      (item, itemIndex) => !isItemComplete(item, record[itemKey(activePeriod, itemIndex)])
+      (item, itemIndex) => !isItemComplete(item, record[itemKey(activePeriod, item)])
     );
     if (index === -1) return;
 
-    const controller = itemControllers.get(itemKey(activePeriod, index));
+    const controller = itemControllers.get(itemKey(activePeriod, section.items[index]));
     if (!controller) return;
 
     const reduceMotion =
@@ -1685,6 +1887,9 @@
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
       return { ok: false, reason: "بنية الملف غير صالحة." };
     }
+    if (Number(raw.schemaVersion || raw.version || 1) > STATE_SCHEMA_VERSION) {
+      return { ok: false, reason: "هذه النسخة الاحتياطية أحدث من إصدار التطبيق الحالي." };
+    }
     if (!raw.days || typeof raw.days !== "object" || Array.isArray(raw.days)) {
       return { ok: false, reason: "الملف لا يحتوي بيانات أذكار." };
     }
@@ -1699,6 +1904,7 @@
       ok: true,
       days,
       settings: normalizeSettings(raw.settings),
+      stats: sanitizeStats(raw.stats),
       dayCount,
       lastDate: Object.keys(days).sort().slice(-1)[0],
     };
@@ -1725,9 +1931,11 @@
 
     const payload = {
       app: "adkar",
-      version: 1,
+      version: STATE_SCHEMA_VERSION,
+      schemaVersion: STATE_SCHEMA_VERSION,
       exportedAt: settings.lastExportAt,
       days: state.days,
+      stats: sanitizeStats(state.stats),
       settings: { ...settings },
     };
 
@@ -1867,7 +2075,7 @@
       const importedRecord = importedDay[period] || {};
 
       SECTIONS[period].items.forEach((item, index) => {
-        const key = itemKey(period, index);
+        const key = itemKey(period, item);
         const entry = mergeItemEntry(item, currentRecord[key], importedRecord[key]);
         if (entry) merged[period][key] = entry;
       });
@@ -1888,6 +2096,53 @@
     return merged;
   }
 
+  // دمج ثلاثي للتبويبات: نحتفظ بتغيير محلي إذا لم يغيّر التبويب الآخر
+  // الإدخال نفسه؛ وعند تعارض الإدخال نفسه تكون نسخة التخزين الأحدث هي المرجع.
+  function parseStateSnapshot(raw) {
+    if (!raw) return { days: {}, stats: { bestStreak: 0 } };
+    try {
+      const parsed = JSON.parse(raw);
+      if (!hasValidStoredShape(parsed) || Number(parsed.schemaVersion || 1) > STATE_SCHEMA_VERSION) return null;
+      return { schemaVersion: STATE_SCHEMA_VERSION, days: sanitizeDays(parsed.days), stats: sanitizeStats(parsed.stats) };
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function mergeConcurrentState(baseState, localState, remoteState) {
+    const baseDays = baseState.days || {};
+    const localDays = localState.days || {};
+    const remoteDays = remoteState.days || {};
+    const mergedDays = {};
+    const dayKeys = new Set([...Object.keys(baseDays), ...Object.keys(localDays), ...Object.keys(remoteDays)]);
+    dayKeys.forEach((dayKeyValue) => {
+      const mergedDay = emptyDay();
+      Object.keys(SECTIONS).forEach((period) => {
+        const baseRecord = (baseDays[dayKeyValue] && baseDays[dayKeyValue][period]) || {};
+        const localRecord = (localDays[dayKeyValue] && localDays[dayKeyValue][period]) || {};
+        const remoteRecord = (remoteDays[dayKeyValue] && remoteDays[dayKeyValue][period]) || {};
+        SECTIONS[period].items.forEach((item) => {
+          const key = itemKey(period, item);
+          const baseEntry = baseRecord[key] || null;
+          const localEntry = localRecord[key] || null;
+          const remoteEntry = remoteRecord[key] || null;
+          const localChanged = JSON.stringify(localEntry) !== JSON.stringify(baseEntry);
+          const remoteChanged = JSON.stringify(remoteEntry) !== JSON.stringify(baseEntry);
+          const chosen = localChanged && !remoteChanged ? localEntry : remoteEntry;
+          if (chosen) mergedDay[period][key] = chosen;
+        });
+      });
+      if (Object.keys(SECTIONS).some((period) => Object.keys(mergedDay[period]).length)) {
+        mergedDays[dayKeyValue] = mergedDay;
+      }
+    });
+    return {
+      schemaVersion: STATE_SCHEMA_VERSION,
+      days: sanitizeDays(mergedDays),
+      stats: mergeStats(baseState.stats, localState.stats, remoteState.stats),
+    };
+  }
+
   function finishImport() {
     pendingImport = null;
     elements.importConfirm.hidden = true;
@@ -1902,7 +2157,10 @@
     if (!pendingImport) return;
 
     const imported = pendingImport;
-    state = { days: imported.days };
+    // الاستيراد الصريح من المستخدم هو مسار الاسترداد عند فساد التخزين.
+    storageBlocked = false;
+    storageLoadIssue = null;
+    state = { schemaVersion: STATE_SCHEMA_VERSION, days: imported.days, stats: imported.stats };
     pruneDays();
     saveState();
 
@@ -1928,7 +2186,10 @@
     const imported = pendingImport;
     const addedDays = Object.keys(imported.days).filter((key) => !state.days[key]).length;
 
-    state = { days: mergeDays(state.days, imported.days) };
+    // الدمج الصريح يسمح بالاسترداد من نسخة سليمة إذا كان التخزين السابق تالفاً.
+    storageBlocked = false;
+    storageLoadIssue = null;
+    state = { schemaVersion: STATE_SCHEMA_VERSION, days: mergeDays(state.days, imported.days), stats: mergeStats(state.stats, imported.stats) };
     pruneDays();
     saveState();
 
@@ -2137,8 +2398,14 @@
   /* ===== المزامنة بين التبويبات ===== */
   // حدث storage يصل إلى كل التبويبات عدا الذي كتب؛ نعيد القراءة
   // من الصفر بدل محاولة الدمج، فالمصدر الأحدث هو التخزين نفسه.
-  function reloadStateFromStorage() {
-    state = loadState();
+  function reloadStateFromStorage(nextState) {
+    if (nextState) state = nextState;
+    else {
+      storageBlocked = false;
+      storageLoadIssue = null;
+      state = loadState();
+    }
+    if (storageBlocked) reportStorageState(false);
     renderedDay = dayKey();
     selectedCalendarKey = renderedDay;
     calendarMonth = startOfMonth(new Date());
@@ -2160,8 +2427,23 @@
     }
 
     if (event.key === STORAGE_KEY) {
-      reloadStateFromStorage();
-      announce("تم تحديث التقدم من تبويب آخر");
+      const baseState = lastPersistedState || parseStateSnapshot(event.oldValue);
+      storageBlocked = false;
+      storageLoadIssue = null;
+      const remoteState = loadState();
+      if (storageBlocked) {
+        reportStorageState(false);
+        reloadStateFromStorage(state);
+        announce("تعذّرت مزامنة البيانات لأن التخزين الخارجي تالف");
+        return;
+      }
+      const mergedState = mergeConcurrentState(baseState, state, remoteState);
+      state = mergedState;
+      lastPersistedState = JSON.parse(JSON.stringify(remoteState));
+      // saveState يعيد قراءة الحالة داخل القفل قبل الكتابة، فلا يعتمد على oldValue وحده.
+      if (JSON.stringify(mergedState) !== JSON.stringify(remoteState)) saveState();
+      reloadStateFromStorage(mergedState);
+      announce("تمت مزامنة التقدم من تبويب آخر");
       return;
     }
 
@@ -2177,6 +2459,7 @@
   /* ===== بدء التشغيل ===== */
   // بترتيب معتمد: مزامنة أزرار الإعدادات مع ما قرأنا، فحجم الخط،
   // فالتاريخ، فتذكير النسخة، ثم رسم القسم الذي يناسب الساعة الآن.
+  if (storageBlocked) reportStorageState(false);
   syncSettingsUI();
   applyFontSize();
   updateDates();

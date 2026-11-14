@@ -6,6 +6,28 @@ const vm = require("vm");
 
 const ROOT = path.join(__dirname, "..");
 const read = (name) => fs.readFileSync(path.join(ROOT, name), "utf8");
+const APP_SOURCE = read("app/app.js");
+const DHIKR_SHARED_SOURCE = APP_SOURCE.slice(
+  APP_SOURCE.indexOf("const DHIKR = {"),
+  APP_SOURCE.indexOf("/* ===== أذكار الصباح")
+);
+const SHARED_DHIKR_IDS = new Map(
+  [...DHIKR_SHARED_SOURCE.matchAll(/^\s{4}(\w+): {\s*\n\s{6}id: "([^"]+)"/gm)]
+    .map((match) => [match[1], match[2]])
+);
+const DHIKR_COUNTS = new Map(
+  [...APP_SOURCE.matchAll(/id: "([^"]+)",\s*\n\s*title: "[^"]+",\s*\n\s*count: (\d+)/g)]
+    .map((match) => [match[1], Number(match[2])])
+);
+function getSectionItemIds(name, endMarker) {
+  const start = APP_SOURCE.indexOf("const " + name + " = [");
+  const end = APP_SOURCE.indexOf(endMarker, start);
+  const block = APP_SOURCE.slice(start, end);
+  return [...block.matchAll(/DHIKR\.(\w+)|id: "([^"]+)"/g)]
+    .map((match) => match[1] ? SHARED_DHIKR_IDS.get(match[1]) : match[2]);
+}
+const MORNING_ITEM_IDS = getSectionItemIds("MORNING_ITEMS", "/* ===== أذكار الاستيقاظ");
+const EVENING_ITEM_IDS = getSectionItemIds("EVENING_ITEMS", "/* ===== أذكار النوم");
 
 let passed = 0;
 let failed = 0;
@@ -37,6 +59,20 @@ function fail(message) {
   const faviconSvg = read("app/favicon.svg");
   const faviconIco = fs.readFileSync(path.join(ROOT, "favicon.ico"));
   const testsSource = fs.readFileSync(__filename, "utf8");
+
+  const pruneBody = app.slice(app.indexOf("function pruneDays"), app.indexOf("function getDay", app.indexOf("function pruneDays")));
+  if (pruneBody.indexOf("updateStreakStats();") >= 0 && pruneBody.indexOf("updateStreakStats();") < pruneBody.indexOf("delete state.days")) pass("streak statistics update before day pruning");
+  else fail("streak statistics must update before day pruning");
+
+  if (app.includes('navigator.locks.request("adkar-progress-write"')) pass("cross-tab writes use the Web Locks API");
+  else fail("cross-tab writes are not serialized with Web Locks");
+
+  const explicitIds = [...app.matchAll(/^\s*id: "([a-z0-9-]+)",\s*\n\s*title:/gm)].map((match) => match[1]);
+  if (explicitIds.length === 37 && new Set(explicitIds).size === explicitIds.length) pass("all 37 dhikr records have unique explicit IDs");
+  else fail(`dhikr explicit IDs: ${explicitIds.length} records, ${new Set(explicitIds).size} unique`);
+
+  if (fs.existsSync(path.join(ROOT, "tests/cross-tab-sync.html"))) pass("two-context browser synchronization fixture exists");
+  else fail("missing two-context browser synchronization fixture");
 
   /* ===== الصياغة ===== */
   [
@@ -648,6 +684,23 @@ const undoText = byId.get("undo-text");
 const undoButton = byId.get("undo-button");
 const settings = () => JSON.parse(storage.get("adkar.settings.v1") || "{}");
 const state = () => JSON.parse(storage.get("adkar.v1") || '{"days":{}}');
+const previousTitleKey = (period, title) => {
+  const source = String(title).normalize("NFKC").trim();
+  let hash = 2166136261;
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return period + "-" + (hash >>> 0).toString(36);
+};
+const itemKeys = {
+  morning0: "morning-ayat-al-kursi",
+  morning1: "morning-surah-al-ikhlas",
+  morning2: "morning-surah-al-falaq",
+  evening0: "evening-ayat-al-kursi",
+  wake0: "wake-wake-after-sleep",
+  sleep0: "sleep-last-two-baqarah",
+};
 
 const pill = (index) => list.children[index].querySelector(".pill");
 const resetItem = (index) => list.children[index].querySelector(".undo");
@@ -730,6 +783,7 @@ check(
   document.title
 );
 check("progress saved to storage", Boolean(state().days["2026-10-31"]));
+check("progress storage uses schema version 2", state().schemaVersion === 2, String(state().schemaVersion));
 check("undo bar visible", undoBar.hidden === false);
 check("undo text mentions title", undoText.textContent.includes("آية الكرسي"), undoText.textContent);
 undoButton.click();
@@ -1084,12 +1138,12 @@ async function runAsyncTests() {
   );
   check(
     "merge never lowers an existing count",
-    state().days["2026-10-31"].morning["morning-0"].count === 1,
-    JSON.stringify(state().days["2026-10-31"].morning["morning-0"])
+    state().days["2026-10-31"].morning[itemKeys.morning0].count === 1,
+    JSON.stringify(state().days["2026-10-31"].morning[itemKeys.morning0])
   );
   check(
     "merge adds the imported evening progress",
-    state().days["2026-10-31"].evening["evening-0"].count === 1,
+    state().days["2026-10-31"].evening[itemKeys.evening0].count === 1,
     JSON.stringify(state().days["2026-10-31"].evening)
   );
   check(
@@ -1100,8 +1154,8 @@ async function runAsyncTests() {
   check(
     "merge combines both records on an existing day",
     Boolean(
-      state().days["2026-10-30"].morning["morning-0"] &&
-        state().days["2026-10-30"].morning["morning-1"]
+      state().days["2026-10-30"].morning[itemKeys.morning0] &&
+        state().days["2026-10-30"].morning[itemKeys.morning1]
     ),
     JSON.stringify(state().days["2026-10-30"].morning)
   );
@@ -1313,7 +1367,7 @@ async function runAsyncTests() {
     Boolean(
       state().days["2026-10-31"] &&
         state().days["2026-10-31"].wake &&
-        state().days["2026-10-31"].wake["wake-0"]
+        state().days["2026-10-31"].wake[itemKeys.wake0]
     )
   );
   check(
@@ -1421,7 +1475,7 @@ async function runAsyncTests() {
     Boolean(
       state().days["2026-10-31"] &&
         state().days["2026-10-31"].sleep &&
-        state().days["2026-10-31"].sleep["sleep-0"]
+        state().days["2026-10-31"].sleep[itemKeys.sleep0]
     )
   );
   check(
@@ -1496,6 +1550,118 @@ async function runAsyncTests() {
     "a storage event applies settings from another tab",
     document.documentElement.dataset.fontSize === "large",
     document.documentElement.dataset.fontSize
+  );
+
+  /* اختبار سلسلة تتجاوز نافذة الاحتفاظ */
+  const completeRecord = (period, ids) => Object.fromEntries(ids.map((id) => {
+    const count = DHIKR_COUNTS.get(id);
+    return [period + "-" + id, count === 0 ? { count: 0, done: true } : { count, done: true }];
+  }));
+  const longStreakDays = {};
+  const startDate = new RealDate(2026, 9, 31);
+  for (let offset = 60; offset >= 1; offset -= 1) {
+    const date = new RealDate(startDate);
+    date.setDate(date.getDate() - offset);
+    const key = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+    longStreakDays[key] = {
+      morning: completeRecord("morning", MORNING_ITEM_IDS),
+      evening: completeRecord("evening", EVENING_ITEM_IDS),
+      wake: {},
+      sleep: {},
+    };
+  }
+  storage.set("adkar.v1", JSON.stringify({ schemaVersion: 2, days: longStreakDays, stats: { bestStreak: 0 } }));
+  dispatchWindowEvent("storage", { key: "adkar.v1" });
+  tabMorning.click();
+  MORNING_ITEM_IDS.forEach((id, index) => {
+    const button = pill(index);
+    while (!button.classList.contains("is-done")) button.click();
+  });
+  tabEvening.click();
+  EVENING_ITEM_IDS.forEach((id, index) => {
+    const button = pill(index);
+    while (!button.classList.contains("is-done")) button.click();
+  });
+  check(
+    "best streak preserves a 61-day run across pruning",
+    state().stats.bestStreak === 61,
+    JSON.stringify(state().stats)
+  );
+  check(
+    "current streak remains accurate after pruning",
+    state().stats.currentStreak === 61 && state().stats.currentStreakDate === "2026-10-31",
+    JSON.stringify(state().stats)
+  );
+  check(
+    "day details remain bounded after a long streak",
+    Object.keys(state().days).length === 60,
+    String(Object.keys(state().days).length)
+  );
+
+  /* ترحيل المفاتيح السابقة إلى المعرّفات الصريحة */
+  const migratedProgress = JSON.parse(storage.get("adkar.v1"));
+  migratedProgress.days["2026-10-20"] = {
+    morning: { "morning-0": { count: 1, done: true } },
+    evening: { [previousTitleKey("evening", "آية الكرسي")]: { count: 1, done: true } },
+    wake: {},
+    sleep: {},
+  };
+  storage.set("adkar.v1", JSON.stringify(migratedProgress));
+  dispatchWindowEvent("storage", { key: "adkar.v1" });
+  // الترحيل يحدث في الذاكرة أولاً؛ احفظ تغييراً عادياً في قسم الصباح.
+  tabMorning.click();
+  if (pill(2).textContent === "تم ✓") resetItem(2).click();
+  else pill(2).click();
+  check(
+    "legacy positional keys migrate to explicit IDs",
+    state().days["2026-10-20"].morning[itemKeys.morning0].count === 1
+  );
+  check(
+    "previous title-hash keys migrate to explicit IDs",
+    state().days["2026-10-20"].evening[itemKeys.evening0].count === 1
+  );
+
+  /* وصول تحديث خارجي من تبويب آخر */
+  const remoteProgress = JSON.parse(storage.get("adkar.v1"));
+  remoteProgress.days["2026-10-31"] = remoteProgress.days["2026-10-31"] || { morning: {}, evening: {}, wake: {}, sleep: {} };
+  remoteProgress.days["2026-10-31"].morning = remoteProgress.days["2026-10-31"].morning || {};
+  remoteProgress.days["2026-10-31"].morning[itemKeys.morning2] = { count: 1, done: false };
+  storage.set("adkar.v1", JSON.stringify(remoteProgress));
+  dispatchWindowEvent("storage", { key: "adkar.v1" });
+  check(
+    "storage event reloads progress from another tab",
+    state().days["2026-10-31"].morning[itemKeys.morning2].count === 1,
+    JSON.stringify(state().days["2026-10-31"].morning)
+  );
+
+  /* حماية التخزين التالف */
+  const structurallyCorruptedProgress = JSON.stringify({ days: { "2026-10-31": null } });
+  storage.set("adkar.v1", structurallyCorruptedProgress);
+  dispatchWindowEvent("storage", { key: "adkar.v1" });
+  check(
+    "valid JSON with a malformed day record is treated as corruption",
+    byId.get("storage-warning").hidden === false
+  );
+  pill(0).click();
+  check(
+    "malformed day records are never overwritten",
+    storage.get("adkar.v1") === structurallyCorruptedProgress,
+    storage.get("adkar.v1")
+  );
+
+  /* حماية التخزين التالف */
+  const corruptedProgress = "{ invalid json";
+  storage.set("adkar.v1", corruptedProgress);
+  dispatchWindowEvent("storage", { key: "adkar.v1" });
+  check(
+    "corrupted progress displays a warning",
+    byId.get("storage-warning").hidden === false
+  );
+  pill(0).click();
+  check(
+    "corrupted progress is never overwritten by an automatic save",
+    storage.get("adkar.v1") === corruptedProgress,
+    storage.get("adkar.v1")
   );
 
 }
