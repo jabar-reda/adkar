@@ -1566,7 +1566,7 @@
     );
     if (index === -1) return;
 
-    const controller = itemControllers.get(itemKey(activePeriod, index));
+    const controller = itemControllers.get(itemKey(activePeriod, section.items[index]));
     if (!controller) return;
 
     const reduceMotion =
