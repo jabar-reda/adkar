@@ -176,18 +176,28 @@ node tests/tests.js
 
 ## بناء تطبيق أندرويد
 
-الموقع نفسه لا يُلمس في البناء؛ يُنسخ إلى `apk/www` ويُغلّف بـ Capacitor في WebView:
+الموقع نفسه لا يُلمس في البناء؛ يُنسخ إلى `apk/www` ويُغلّف بـ Capacitor في WebView. مفتاح التوقيع **لا يُنشأ في CI** — أنشئه محلياً مرة واحدة وأضفه للأسرار.
 
-1. افتح تبويب **Actions** في GitHub ← سير عمل «بناء APK» ← زر **Run workflow**.
-2. **أول بناء فقط**: أدخل كلمة مرور في حقل `keystore_password` — سيولّد Workflow مفتاح توقيع جديداً ويرفعه كـ artifact باسم `adkar-keystore`.
-3. أضف المفتاح إلى **أسرار المستودع** (Settings ← Secrets ← Actions):
-   - `ANDROID_KEYSTORE`: محتوى ملف `adkar.keystore` بترميز base64 (`base64 -w0 adkar.keystore`).
-   - `ANDROID_KEYSTORE_PASSWORD`: كلمة المرور نفسها التي أدخلتها.
-4. البناء اللاحق يحتاج لا حقل ولا سرّاً جديداً — يقرأ المفتاح من الأسرار ويرفع `adkar-apk` جاهزاً للتثبيت.
+1. **أنشئ مفتاح التوقيع محلياً** (مرة واحدة، واحفظه في مكان آمن — إن فقدته لا يمكنك تحديث التطبيق لاحقاً):
+   ```powershell
+   keytool -genkeypair -v -keystore adkar.keystore -alias adkar -keyalg RSA -keysize 2048 -validity 10000
+   ```
+2. **أضفه إلى أسرار المستودع** (Settings ← Secrets and variables ← Actions):
+   - `ANDROID_KEYSTORE`: محتوى الملف بترميز base64.
+   - `ANDROID_KEYSTORE_PASSWORD`: كلمة المرور التي أدخلتها.
+   - PowerShell لترميز الملف:
+     ```powershell
+     [Convert]::ToBase64String([IO.File]::ReadAllBytes("adkar.keystore")) | Set-Clipboard
+     ```
+3. **احذف ملف `adkar.keystore` من جهازك** بعد نسخه إلى الأسرار (أو احتفظ به في مكان آمن، لا في المستودع).
+4. افتح تبويب **Actions** ← سير عمل «بناء APK» ← **Run workflow**.
+5. بعد انتهاء البناء، حمّل artifact `adkar-apk` → `app-release.apk` وثبّته فوق الإصدار السابق.
 
-- رقم الإصدار (`versionCode`/`versionName`) يتزايد تلقائياً مع كل تشغيل.
-- أيقونة التطبيق وشاشة البداية تولَّدان مسبقاً بـ `apk/make-icons.py` (بلا أدوات خارجية)، وأعيد توليدها عند تعديل الهوية.
+- `versionCode` يتزايد تلقائياً مع كل تشغيل (`run_number × 10 + run_attempt`)، لذا يُثبّت كل APK كتحديث.
+- أيقونة التطبيق وشاشة البداية تولَّدان مسبقاً بـ `apk/make-icons.py`.
 - المشروع المولّد `apk/android/` لا يُرفع إلى المستودع، وهو مستثنى في `.gitignore`.
+- البناء **يفشل** (وليس ينشئ مفتاحاً) إذا كانت الأسرار غير مضبوطة — هذا مقصود لحماية مفتاح التوقيع.
+- التحقق من التوقيع: `jarsigner -verify app-release.apk`.
 
 ## الخصوصية
 

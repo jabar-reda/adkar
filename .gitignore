@@ -18,4 +18,6 @@ adkar.zip
 # بناء APK (يتولد داخل CI)
 apk/android/
 apk/node_modules/
+apk/www/
+apk/__pycache__/
 *.keystore
