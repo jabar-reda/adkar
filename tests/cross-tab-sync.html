@@ -46,6 +46,8 @@
         frame.src = "../index.html";
       }));
 
+      let outcome = "failed";
+      let message = "";
       try {
         await Promise.all(loaded);
         // لا نعتمد على الساعة المحلية للمتصفح؛ نختار الصباح صراحةً في السياقين.
@@ -63,6 +65,30 @@
           const d = new Date();
           return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-");
         })();
+        const expected = ["morning-ayat-al-kursi", "morning-surah-al-ikhlas"];
+        const deadline = Date.now() + 5000;
+        while (Date.now() < deadline) {
+          const raw = localStorage.getItem("adkar.v1");
+          const saved = raw ? JSON.parse(raw) : null;
+          const record = saved && saved.days && saved.days[today] && saved.days[today].morning;
+          if (record && expected.every((key) => record[key] && record[key].count === 1)) {
+            outcome = "passed";
+            message = "نجاح: احتُفظ بالتحديثين المستقلين من السياقين في التخزين المشترك.";
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        if (outcome !== "passed") throw new Error("فشل: لم يظهر التحديثان معاً في التخزين خلال 5 ثوانٍ.");
+      } catch (error) {
+        message = error.message;
+      } finally {
+        // نمنح عمليات القفل القصيرة فرصة للانتهاء قبل إعادة بيانات المستخدم.
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        restoreProgress();
+      }
+      output.textContent = message;
+      output.dataset.result = outcome;
+    })();
         const expected = ["morning-ayat-al-kursi", "morning-surah-al-ikhlas"];
         const deadline = Date.now() + 5000;
         while (Date.now() < deadline) {
