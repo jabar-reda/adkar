@@ -77,10 +77,10 @@ python -m http.server 8000
       },
       "evening": {},
       "wake": {
-        "wake-0": { "count": 1, "done": true }
+        "wake-wake-after-sleep": { "count": 1, "done": true }
       },
       "sleep": {
-        "sleep-0": { "count": 1, "done": true }
+        "sleep-last-two-baqarah": { "count": 1, "done": true }
       }
     }
   }
