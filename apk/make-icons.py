@@ -1,44 +1,54 @@
 """يولّد أيقونة التطبيق وشاشة البداية من هوية أذكار بلا أي أداة خارجية.
 
-التصميم يجمع لغة دفتر (خلفية داكنة وورقة فاتحة) ببصمة هذا الموقع:
-المعيّن المُدار 45° من النقش الهندسي، بلون الذهبي المستخدم في التقويم.
-يرسم بالعينات الفرعية (2×2) لتنعيم الحواف، ويكتب PNG بـRGB عبر zlib فقط.
-الناتج في apk/assets يقرؤه @capacitor/assets داخل CI.
+يعيد رسم تصميم app/favicon.svg حرفياً بمقاييس مضخّمة: نجمة رباعية بيضاء
+على أخضر الفجر للأيقونة، وماركة خضراء على الفجر الفاتح لشاشة البداية.
+الأيقونة مربعة كاملة الحواف (بلا زوايا دائرية) لأن قاذف التطبيقات هو
+من يقصّ الزوايا بنفسه. يرسم بالعينات الفرعية (2×2) لتنعيم الحواف، ويكتب
+PNG بـRGB عبر zlib فقط. الناتج في apk/assets يقرؤه @capacitor/assets داخل CI.
 """
 import struct
 import zlib
 
-# ألوان الهوية من :root في app/styles.css
-GREEN = (0x0D, 0x6A, 0x4D)      # --accent (أخضر الفجر)
-SHEET = (0xF6, 0xFA, 0xF5)      # --surface
-GOLD = (0xC9, 0xA2, 0x27)       # --gold
-DAY_BG = (0xE7, 0xEF, 0xE8)     # --bg
+# ألوان الهوية من app/favicon.svg و:root في app/styles.css
+GREEN = (0x0D, 0x6A, 0x4D)      # خلفية الأيقونة (--accent)
+WHITE = (0xF6, 0xFA, 0xF5)      # لون النجمة (--surface)
+DAY_BG = (0xE7, 0xEF, 0xE8)     # خلفية شاشة البداية (--bg)
 SAMPLES = ((0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75))
 
-
-def in_round_rect(x, y, x0, y0, x1, y1, r):
-    """اختبار نقطة داخل مستطيل بأركان دائرية."""
-    if not (x0 <= x <= x1 and y0 <= y <= y1):
-        return False
-    dx = max(x0 + r - x, x - (x1 - r), 0)
-    dy = max(y0 + r - y, y - (y1 - r), 0)
-    return dx * dx + dy * dy <= r * r
-
-
-def in_diamond(x, y, cx, cy, r):
-    """اختبار نقطة داخل معيّن (مربع مُدار 45°) بمسافة مانهاتن."""
-    return abs(x - cx) + abs(y - cy) <= r
+# مضلع النجمة الرباعية من مسار favicon.svg (شبكة 32): أطرافها على
+# المحاور بمسافة 10 من المركز، ورأسها الغائر بين كل طرفين عند (±2.6، ±2.6).
+STAR_32 = [
+    (16.0, 6.0), (18.6, 13.4),
+    (26.0, 16.0), (18.6, 18.6),
+    (16.0, 26.0), (13.4, 18.6),
+    (6.0, 16.0), (13.4, 13.4),
+]
 
 
-def in_diamond_outline(x, y, cx, cy, r_outer, thickness):
-    """إطار معيّن مفرّغ: بين الحد الخارجي والحد الداخلي."""
-    d = abs(x - cx) + abs(y - cy)
-    return r_outer >= d > r_outer - thickness
+def star_polygon(cx, cy, scale):
+    """نسخة من مضلع النجمة محورة المركز ومكبّرة بمعامل scale."""
+    return [(cx + (x - 16.0) * scale, cy + (y - 16.0) * scale) for x, y in STAR_32]
+
+
+def inside_polygon(x, y, points):
+    """اختبار نقطة داخل مضلع بأسلوب العدد الزوجي (ray casting)."""
+    inside = False
+    j = len(points) - 1
+    for i in range(len(points)):
+        xi, yi = points[i]
+        xj, yj = points[j]
+        if (yi > y) != (yj > y):
+            crossing = xi + (y - yi) * (xj - xi) / (yj - yi)
+            if x < crossing:
+                inside = not inside
+        j = i
+    return inside
 
 
 def pixel_color(x, y, layers):
-    """لون النقطة: أعلى طبقة تضمها، أو شفافياً تُملأ بلون الخلفية."""
-    for color, test in layers:
+    """لون النقطة من أعلى طبقة تضمها: الفحص من آخر طبقة في القائمة
+    إلى أولها، فتظهر الطبقات اللاحقة فوق السابقة كما في CSS."""
+    for color, test in reversed(layers):
         if test(x, y):
             return color
     return None
@@ -101,21 +111,18 @@ def write_png(path, rows):
     print("كُتب", path, width, "×", height)
 
 
-# الأيقونة 1024: خلفية خضراء وورقة فاتحة بداخلها معيّن ذهبي مفرّغ
+# الأيقونة 1024: نجمة بيضاء بنفس نسب favicon.svg (قطرها 62.5% من الوجه)
+icon_scale = 1024 * (10.0 / 32.0) / 10.0
 icon_rows = render(
     1024, GREEN,
-    [
-        (SHEET, lambda x, y: in_round_rect(x, y, 212, 192, 812, 832, 48)),
-        (GOLD, lambda x, y: in_diamond_outline(x, y, 512, 512, 190, 36)),
-    ],
+    [(WHITE, lambda x, y: inside_polygon(x, y, star_polygon(512, 512, icon_scale)))],
 )
 write_png("apk/assets/icon.png", icon_rows)
 
-# شاشة البداية: خلفية فجرية وعلامة معيّن ذهبي صغيرة، تُرسم 1366 ثم تُكبَّر إلى 2732
+# شاشة البداية: خلفية فجرية وماركة خضراء، تُرسم 1366 ثم تُكبَّر إلى 2732
+splash_scale = 1366 * (10.0 / 32.0) / 10.0
 splash_rows = render(
     1366, DAY_BG,
-    [
-        (GOLD, lambda x, y: in_diamond_outline(x, y, 683, 683, 90, 26)),
-    ],
+    [(GREEN, lambda x, y: inside_polygon(x, y, star_polygon(683, 683, splash_scale)))],
 )
 write_png("apk/assets/splash.png", upscale(splash_rows, 1366, 2))
