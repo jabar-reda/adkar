@@ -11,7 +11,7 @@
 
   /* ===== الثوابت ===== */
   // تُعرّف القيم المشتركة مع theme-init.js في config.js المحمّل قبل هذا الملف.
-  const CONFIG = window.DOUAA_CONFIG;
+  const CONFIG = window.ADKAR_CONFIG;
   if (!CONFIG) throw new Error("config.js must load before app.js");
 
   const STORAGE_KEY = CONFIG.storageKeys.state;
@@ -1724,7 +1724,7 @@
     updateBackupReminder();
 
     const payload = {
-      app: "douaa-tracker",
+      app: "adkar",
       version: 1,
       exportedAt: settings.lastExportAt,
       days: state.days,
@@ -1733,7 +1733,7 @@
 
     downloadFile(
       JSON.stringify(payload, null, 2),
-      `douaa-tracker-${dayKey()}.json`,
+      `adkar-${dayKey()}.json`,
       "application/json"
     );
 
@@ -1795,7 +1795,7 @@
     const csv =
       "\uFEFF" + rows.map((row) => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
 
-    downloadFile(csv, `douaa-tracker-${dayKey()}.csv`, "text/csv;charset=utf-8");
+    downloadFile(csv, `adkar-${dayKey()}.csv`, "text/csv;charset=utf-8");
     setBackupStatus(`تم تصدير ${formatDayTotal(keys.length)} إلى CSV.`);
   }
 

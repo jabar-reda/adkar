@@ -1,9 +1,9 @@
 // يضبط الألوان وحجم الخط قبل رسم الصفحة، حتى لا تومض القيم الافتراضية.
 // القيم المشتركة تأتي من config.js المحمّل قبله في index.html.
 (function () {
-  var config = window.DOUAA_CONFIG || {};
+  var config = window.ADKAR_CONFIG || {};
   var storageKeys = config.storageKeys || {};
-  var settingsKey = storageKeys.settings || "douaa-tracker.settings.v1";
+  var settingsKey = storageKeys.settings || "adkar.settings.v1";
   var sizes = config.fontSizes || ["small", "medium", "large", "xlarge"];
   var windows = config.periodWindows || {
     morning: { start: 4, end: 15 },

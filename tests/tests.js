@@ -1,4 +1,4 @@
-// اختبارات douaa-tracker كلها في ملف واحد: البنية، محاكاة DOM، التثبيت، وService Worker.
+// اختبارات adkar كلها في ملف واحد: البنية، محاكاة DOM، وسلوك التطبيق.
 // الاستخدام: node tests/tests.js أو npm test
 const fs = require("fs");
 const path = require("path");
@@ -85,8 +85,8 @@ function fail(message) {
     fail("config.js must load before theme-init.js");
   }
 
-  if (/window\.DOUAA_CONFIG/.test(app) && /window\.DOUAA_CONFIG/.test(themeInit)) {
-    pass("app.js and theme-init.js share window.DOUAA_CONFIG");
+  if (/window\.ADKAR_CONFIG/.test(app) && /window\.ADKAR_CONFIG/.test(themeInit)) {
+    pass("app.js and theme-init.js share window.ADKAR_CONFIG");
   } else {
     fail("app.js and theme-init.js must read the shared config");
   }
@@ -646,8 +646,8 @@ const timeLeft = byId.get("time-left");
 const undoBar = byId.get("undo-bar");
 const undoText = byId.get("undo-text");
 const undoButton = byId.get("undo-button");
-const settings = () => JSON.parse(storage.get("douaa-tracker.settings.v1") || "{}");
-const state = () => JSON.parse(storage.get("douaa-tracker.v1") || '{"days":{}}');
+const settings = () => JSON.parse(storage.get("adkar.settings.v1") || "{}");
+const state = () => JSON.parse(storage.get("adkar.v1") || '{"days":{}}');
 
 const pill = (index) => list.children[index].querySelector(".pill");
 const resetItem = (index) => list.children[index].querySelector(".undo");
@@ -861,7 +861,7 @@ const fakeFile = {
   text: () =>
     Promise.resolve(
       JSON.stringify({
-        app: "douaa-tracker",
+        app: "adkar",
         version: 1,
         days: {
           "2026-10-31": {
@@ -1026,7 +1026,7 @@ async function runAsyncTests() {
       text: () =>
         Promise.resolve(
           JSON.stringify({
-            app: "douaa-tracker",
+            app: "adkar",
             version: 1,
             days: {
               "2026-10-31": {
@@ -1478,20 +1478,20 @@ async function runAsyncTests() {
 
   /* المزامنة بين التبويبات */
   storage.set(
-    "douaa-tracker.v1",
+    "adkar.v1",
     JSON.stringify({
       days: { "2026-10-31": { morning: { "morning-0": { count: 1, done: true } } } },
     })
   );
-  dispatchWindowEvent("storage", { key: "douaa-tracker.v1" });
+  dispatchWindowEvent("storage", { key: "adkar.v1" });
   check(
     "a storage event reloads progress from another tab",
     pill(0).textContent === "تم ✓",
     pill(0).textContent
   );
 
-  storage.set("douaa-tracker.settings.v1", JSON.stringify({ fontSize: "large", theme: "auto" }));
-  dispatchWindowEvent("storage", { key: "douaa-tracker.settings.v1" });
+  storage.set("adkar.settings.v1", JSON.stringify({ fontSize: "large", theme: "auto" }));
+  dispatchWindowEvent("storage", { key: "adkar.settings.v1" });
   check(
     "a storage event applies settings from another tab",
     document.documentElement.dataset.fontSize === "large",

@@ -13,4 +13,9 @@ desktop.ini
 *.log
 
 # ملفات مضغوطة
-douaa-tracker.zip
+adkar.zip
+
+# بناء APK (يتولد داخل CI)
+apk/android/
+apk/node_modules/
+*.keystore
