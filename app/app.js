@@ -601,6 +601,13 @@
     state.stats = sanitizeStats(state.stats);
     state.stats.bestStreak = Math.max(state.stats.bestStreak, getBestStreak());
     const localSnapshot = JSON.parse(JSON.stringify(state));
+    // يجب التقاط قاعدة الدمج عند طلب القفل، لا عند تنفيذه؛ فقد تصل storage event
+    // أثناء انتظار القفل وتحدّث lastPersistedState قبل دور هذه العملية.
+    const baseSnapshot = JSON.parse(JSON.stringify(lastPersistedState || {
+      schemaVersion: STATE_SCHEMA_VERSION,
+      days: {},
+      stats: { bestStreak: 0 },
+    }));
 
     // Web Locks يجعل القراءة والدمج والكتابة عملية متسلسلة بين التبويبات.
     // من دونه لا توجد primitive ذرية في localStorage تضمن منع stale overwrite.
@@ -615,7 +622,7 @@
           reportStorageState(false);
           return;
         }
-        const merged = mergeConcurrentState(lastPersistedState, localSnapshot, remote);
+        const merged = mergeConcurrentState(baseSnapshot, localSnapshot, remote);
         merged.stats.bestStreak = Math.max(merged.stats.bestStreak, getBestStreak());
         state = merged;
         localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
