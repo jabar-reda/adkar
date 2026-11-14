@@ -46,6 +46,13 @@ function fail(message) {
   if (app.includes('navigator.locks.request("adkar-progress-write"')) pass("cross-tab writes use the Web Locks API");
   else fail("cross-tab writes are not serialized with Web Locks");
 
+  const explicitIds = [...app.matchAll(/^\\s*id: "([a-z0-9-]+)",\\s*\\n\\s*title:/gm)].map((match) => match[1]);
+  if (explicitIds.length === 37 && new Set(explicitIds).size === explicitIds.length) pass("all 37 dhikr records have unique explicit IDs");
+  else fail(`dhikr explicit IDs: ${explicitIds.length} records, ${new Set(explicitIds).size} unique`);
+
+  if (fs.existsSync(path.join(ROOT, "tests/cross-tab-sync.html"))) pass("two-context browser synchronization fixture exists");
+  else fail("missing two-context browser synchronization fixture");
+
   /* ===== الصياغة ===== */
   [
     ["app/app.js", app],
@@ -656,7 +663,7 @@ const undoText = byId.get("undo-text");
 const undoButton = byId.get("undo-button");
 const settings = () => JSON.parse(storage.get("adkar.settings.v1") || "{}");
 const state = () => JSON.parse(storage.get("adkar.v1") || '{"days":{}}');
-const stableItemKey = (period, title) => {
+const previousTitleKey = (period, title) => {
   const source = String(title).normalize("NFKC").trim();
   let hash = 2166136261;
   for (let index = 0; index < source.length; index += 1) {
@@ -666,12 +673,12 @@ const stableItemKey = (period, title) => {
   return period + "-" + (hash >>> 0).toString(36);
 };
 const itemKeys = {
-  morning0: stableItemKey("morning", "آية الكرسي"),
-  morning1: stableItemKey("morning", "سورة الإخلاص"),
-  morning2: stableItemKey("morning", "سورة الفلق"),
-  evening0: stableItemKey("evening", "آية الكرسي"),
-  wake0: stableItemKey("wake", "الحمد لله الذي أحيانا بعد ما أماتنا"),
-  sleep0: stableItemKey("sleep", "آخر آيتين من سورة البقرة"),
+  morning0: "morning-ayat-al-kursi",
+  morning1: "morning-surah-al-ikhlas",
+  morning2: "morning-surah-al-falaq",
+  evening0: "evening-ayat-al-kursi",
+  wake0: "wake-wake-after-sleep",
+  sleep0: "sleep-last-two-baqarah",
 };
 
 const pill = (index) => list.children[index].querySelector(".pill");
@@ -1522,6 +1529,25 @@ async function runAsyncTests() {
     "a storage event applies settings from another tab",
     document.documentElement.dataset.fontSize === "large",
     document.documentElement.dataset.fontSize
+  );
+
+  /* ترحيل المفاتيح السابقة إلى المعرّفات الصريحة */
+  const migratedProgress = JSON.parse(storage.get("adkar.v1"));
+  migratedProgress.days["2026-10-30"] = {
+    morning: { "morning-0": { count: 1, done: true } },
+    evening: { [previousTitleKey("evening", "آية الكرسي")]: { count: 1, done: true } },
+    wake: {},
+    sleep: {},
+  };
+  storage.set("adkar.v1", JSON.stringify(migratedProgress));
+  dispatchWindowEvent("storage", { key: "adkar.v1" });
+  check(
+    "legacy positional keys migrate to explicit IDs",
+    state().days["2026-10-30"].morning[itemKeys.morning0].count === 1
+  );
+  check(
+    "previous title-hash keys migrate to explicit IDs",
+    state().days["2026-10-30"].evening[itemKeys.evening0].count === 1
   );
 
   /* وصول تحديث خارجي من تبويب آخر */
