@@ -173,6 +173,7 @@ html[data-font-size="xlarge"] {
 
 html {
   -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent; /* يزيل تظليل اللمس الرمادي على الهاتف */
 }
 
 body {
