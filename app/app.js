@@ -570,6 +570,12 @@
         if (storageBlocked) return;
         const raw = localStorage.getItem(STORAGE_KEY);
         const remote = parseStateSnapshot(raw);
+        if (!remote) {
+          storageBlocked = true;
+          storageLoadIssue = "بيانات التقدم المخزنة تغيّرت إلى بنية تالفة أثناء المزامنة. أوقفنا الكتابة حفاظاً عليها.";
+          reportStorageState(false);
+          return;
+        }
         const merged = mergeConcurrentState(lastPersistedState, localSnapshot, remote);
         merged.stats.bestStreak = Math.max(merged.stats.bestStreak, getBestStreak());
         state = merged;
@@ -1975,12 +1981,10 @@
     if (!raw) return { days: {}, stats: { bestStreak: 0 } };
     try {
       const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== "object" || !parsed.days || typeof parsed.days !== "object" || Array.isArray(parsed.days)) {
-        return { days: {}, stats: { bestStreak: 0 } };
-      }
-      return { days: sanitizeDays(parsed.days), stats: sanitizeStats(parsed.stats) };
+      if (!hasValidStoredShape(parsed) || Number(parsed.schemaVersion || 1) > STATE_SCHEMA_VERSION) return null;
+      return { schemaVersion: STATE_SCHEMA_VERSION, days: sanitizeDays(parsed.days), stats: sanitizeStats(parsed.stats) };
     } catch (error) {
-      return { days: {}, stats: { bestStreak: 0 } };
+      return null;
     }
   }
 
