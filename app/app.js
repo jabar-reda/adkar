@@ -1921,6 +1921,61 @@
     return merged;
   }
 
+  // دمج ثلاثي للتبويبات: نحتفظ بتغيير محلي إذا لم يغيّر التبويب الآخر
+  // الإدخال نفسه؛ وعند تعارض الإدخال نفسه تكون نسخة التخزين الأحدث هي المرجع.
+  function parseStateSnapshot(raw) {
+    if (!raw) return { days: {}, stats: { bestStreak: 0 } };
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object" || !parsed.days || typeof parsed.days !== "object" || Array.isArray(parsed.days)) {
+        return { days: {}, stats: { bestStreak: 0 } };
+      }
+      return { days: sanitizeDays(parsed.days), stats: sanitizeStats(parsed.stats) };
+    } catch (error) {
+      return { days: {}, stats: { bestStreak: 0 } };
+    }
+  }
+
+  function mergeConcurrentState(baseState, localState, remoteState) {
+    const baseDays = baseState.days || {};
+    const localDays = localState.days || {};
+    const remoteDays = remoteState.days || {};
+    const mergedDays = {};
+    const dayKeys = new Set([...Object.keys(baseDays), ...Object.keys(localDays), ...Object.keys(remoteDays)]);
+    dayKeys.forEach((dayKeyValue) => {
+      const mergedDay = emptyDay();
+      Object.keys(SECTIONS).forEach((period) => {
+        const baseRecord = (baseDays[dayKeyValue] && baseDays[dayKeyValue][period]) || {};
+        const localRecord = (localDays[dayKeyValue] && localDays[dayKeyValue][period]) || {};
+        const remoteRecord = (remoteDays[dayKeyValue] && remoteDays[dayKeyValue][period]) || {};
+        SECTIONS[period].items.forEach((item) => {
+          const key = itemKey(period, item);
+          const baseEntry = baseRecord[key] || null;
+          const localEntry = localRecord[key] || null;
+          const remoteEntry = remoteRecord[key] || null;
+          const localChanged = JSON.stringify(localEntry) !== JSON.stringify(baseEntry);
+          const remoteChanged = JSON.stringify(remoteEntry) !== JSON.stringify(baseEntry);
+          const chosen = localChanged && !remoteChanged ? localEntry : remoteEntry;
+          if (chosen) mergedDay[period][key] = chosen;
+        });
+      });
+      if (Object.keys(SECTIONS).some((period) => Object.keys(mergedDay[period]).length)) {
+        mergedDays[dayKeyValue] = mergedDay;
+      }
+    });
+    return {
+      schemaVersion: STATE_SCHEMA_VERSION,
+      days: sanitizeDays(mergedDays),
+      stats: {
+        bestStreak: Math.max(
+          sanitizeStats(baseState.stats).bestStreak,
+          sanitizeStats(localState.stats).bestStreak,
+          sanitizeStats(remoteState.stats).bestStreak
+        ),
+      },
+    };
+  }
+
   function finishImport() {
     pendingImport = null;
     elements.importConfirm.hidden = true;
@@ -2176,10 +2231,10 @@
   /* ===== المزامنة بين التبويبات ===== */
   // حدث storage يصل إلى كل التبويبات عدا الذي كتب؛ نعيد القراءة
   // من الصفر بدل محاولة الدمج، فالمصدر الأحدث هو التخزين نفسه.
-  function reloadStateFromStorage() {
+  function reloadStateFromStorage(nextState) {
     storageBlocked = false;
     storageLoadIssue = null;
-    state = loadState();
+    state = nextState || loadState();
     renderedDay = dayKey();
     selectedCalendarKey = renderedDay;
     calendarMonth = startOfMonth(new Date());
@@ -2201,8 +2256,17 @@
     }
 
     if (event.key === STORAGE_KEY) {
-      reloadStateFromStorage();
-      announce("تم تحديث التقدم من تبويب آخر");
+      const baseState = parseStateSnapshot(event.oldValue);
+      storageBlocked = false;
+      storageLoadIssue = null;
+      const remoteState = loadState();
+      const mergedState = mergeConcurrentState(baseState, state, remoteState);
+      const remoteSnapshot = JSON.stringify(remoteState);
+      state = mergedState;
+      // نكتب فقط إذا احتفظ الدمج بتعديلات محلية لم تكن في آخر نسخة مخزنة.
+      if (JSON.stringify(mergedState) !== remoteSnapshot) saveState();
+      reloadStateFromStorage(mergedState);
+      announce("تمت مزامنة التقدم من تبويب آخر");
       return;
     }
 
