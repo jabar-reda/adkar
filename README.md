@@ -197,8 +197,8 @@ node tests/tests.js
      [Convert]::ToBase64String([IO.File]::ReadAllBytes("adkar.keystore")) | Set-Clipboard
      ```
 3. **احذف ملف `adkar.keystore` من جهازك** بعد نسخه إلى الأسرار (أو احتفظ به في مكان آمن، لا في المستودع).
-4. افتح تبويب **Actions** ← سير عمل «بناء APK» ← **Run workflow**.
-5. بعد انتهاء البناء، حمّل artifact `adkar-apk` → `app-release.apk` وثبّته فوق الإصدار السابق.
+4. لإصدار عام، اتبع خطوات [نشر إصدار على GitHub Releases](#نشر-إصدار-على-github-releases) وادفع الوسم `vMAJOR.MINOR.PATCH`. سيُبنى APK ويُنشر تلقائياً في صفحة Releases.
+5. للبناء التجريبي فقط، افتح **Actions** ← **بناء ونشر APK** ← **Run workflow**، أدخل رقم الإصدار، ثم حمّل Artifact الناتج. هذا التشغيل اليدوي لا ينشئ Release عاماً.
 
 - في الإصدارات المنشورة، يُشتق `versionName` من الوسم ويُحسب `versionCode` منه؛ لا تعِد استخدام رقم إصدار سابق.
 - أيقونة التطبيق وشاشة البداية تولَّدان مسبقاً بـ `apk/make-icons.py`.
