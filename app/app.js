@@ -565,7 +565,7 @@
 
     // Web Locks يجعل القراءة والدمج والكتابة عملية متسلسلة بين التبويبات.
     // من دونه لا توجد primitive ذرية في localStorage تضمن منع stale overwrite.
-    if (navigator.locks && typeof navigator.locks.request === "function") {
+    if (typeof navigator !== "undefined" && navigator.locks && typeof navigator.locks.request === "function") {
       navigator.locks.request("adkar-progress-write", { mode: "exclusive" }, () => {
         if (storageBlocked) return;
         const raw = localStorage.getItem(STORAGE_KEY);
