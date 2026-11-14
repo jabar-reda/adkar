@@ -1530,7 +1530,7 @@ async function runAsyncTests() {
   const remoteProgress = JSON.parse(baseProgress);
   remoteProgress.days["2026-10-31"] = remoteProgress.days["2026-10-31"] || { morning: {}, evening: {}, wake: {}, sleep: {} };
   remoteProgress.days["2026-10-31"].morning = remoteProgress.days["2026-10-31"].morning || {};
-  remoteProgress.days["2026-10-31"].morning["morning-2"] = { count: 1, done: false };
+  remoteProgress.days["2026-10-31"].morning[itemKeys.morning2] = { count: 1, done: false };
   storage.set("adkar.v1", JSON.stringify(remoteProgress));
   dispatchWindowEvent("storage", { key: "adkar.v1", oldValue: baseProgress });
   check(
