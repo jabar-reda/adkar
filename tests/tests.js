@@ -1541,6 +1541,8 @@ async function runAsyncTests() {
   };
   storage.set("adkar.v1", JSON.stringify(migratedProgress));
   dispatchWindowEvent("storage", { key: "adkar.v1" });
+  // الترحيل يحدث في الذاكرة أولاً؛ احفظ تغييراً عادياً للتحقق من كتابة المفاتيح الجديدة.
+  pill(0).click();
   check(
     "legacy positional keys migrate to explicit IDs",
     state().days["2026-10-20"].morning[itemKeys.morning0].count === 1
