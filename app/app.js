@@ -18,6 +18,7 @@
   const SETTINGS_KEY = CONFIG.storageKeys.settings;
   // نحتفظ بآخر 60 يوماً من التقدم فقط حتى لا يتضخم التخزين بلا نهاية.
   const KEEP_DAYS = 60;
+  const STATE_SCHEMA_VERSION = 2;
   // حد حجم ملف النسخة الاحتياطية المقبول عند الاستيراد (2 ميغابايت).
   const MAX_BACKUP_BYTES = 2 * 1024 * 1024;
   // نذكّر المستخدم بتصدير نسخة احتياطية كل أسبوعين.
@@ -417,6 +418,10 @@
   }
   const itemKey = (period, item) => period + "-" + stableItemId(item);
   const legacyItemKey = (period, index) => period + "-" + index;
+  const sanitizeStats = (raw) => {
+    const value = Number(raw && raw.bestStreak);
+    return { bestStreak: Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0 };
+  };
 
   // بنية يوم فارغ لكل الأقسام الأربعة، تُستخدم كأساس آمن للقراءة والكتابة.
   const emptyDay = () => ({ morning: {}, evening: {}, wake: {}, sleep: {} });
@@ -494,41 +499,54 @@
     return days;
   }
 
-  // قراءة كل التقدم من التخزين؛ أي خلل في البيانات يعني البدء من صفر
-  // بدل تعطل الصفحة، لأن البيانات هنا تأتي من متصفح المستخدم نفسه.
+  // لا نعامل البيانات التالفة كحالة فارغة؛ نوقف الكتابة كي لا نمحو الأصل.
   function loadState() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return { days: {} };
-
+      if (!raw) return { schemaVersion: STATE_SCHEMA_VERSION, days: {}, stats: { bestStreak: 0 } };
       const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || typeof parsed.days !== "object" || parsed.days === null) {
-        return { days: {} };
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) ||
+          typeof parsed.days !== "object" || parsed.days === null || Array.isArray(parsed.days)) {
+        storageLoadIssue = "بيانات التقدم المخزنة تالفة أو غير متوافقة. أوقفنا الحفظ التلقائي حفاظاً عليها.";
+        storageBlocked = true;
+        return { schemaVersion: STATE_SCHEMA_VERSION, days: {}, stats: { bestStreak: 0 } };
       }
-      return { days: sanitizeDays(parsed.days) };
+      if (Number(parsed.schemaVersion || 1) > STATE_SCHEMA_VERSION) {
+        storageLoadIssue = "بيانات التقدم من إصدار أحدث. حدّث التطبيق قبل تعديلها حتى لا تفقد بياناتك.";
+        storageBlocked = true;
+        return { schemaVersion: STATE_SCHEMA_VERSION, days: {}, stats: { bestStreak: 0 } };
+      }
+      return { schemaVersion: STATE_SCHEMA_VERSION, days: sanitizeDays(parsed.days), stats: sanitizeStats(parsed.stats) };
     } catch (error) {
-      return { days: {} };
+      storageLoadIssue = "تعذّرت قراءة بيانات التقدم المخزنة. أوقفنا الحفظ التلقائي حتى لا تُستبدل البيانات التالفة.";
+      storageBlocked = true;
+      return { schemaVersion: STATE_SCHEMA_VERSION, days: {}, stats: { bestStreak: 0 } };
     }
   }
 
   function reportStorageState(saved) {
     const warning = elements.storageWarning;
     if (!warning) return;
+    if (!saved) warning.textContent = storageLoadIssue || "تعذّر حفظ التقدم على هذا الجهاز؛ سيبقى التقدم في الذاكرة حتى إغلاق الصفحة.";
     warning.hidden = saved;
     if (!saved && !storageWarningShown) {
       storageWarningShown = true;
-      announce("تعذّر حفظ التقدم على هذا الجهاز");
+      announce(storageLoadIssue || "تعذّر حفظ التقدم على هذا الجهاز");
     }
   }
 
   function saveState() {
+    if (storageBlocked) { reportStorageState(false); return false; }
     try {
+      state.schemaVersion = STATE_SCHEMA_VERSION;
+      state.stats = sanitizeStats(state.stats);
+      state.stats.bestStreak = Math.max(state.stats.bestStreak, getBestStreak());
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       reportStorageState(true);
+      return true;
     } catch (error) {
-      // التخزين قد يكون معطلاً (وضع التصفح الخاص) — يبقى التطبيق يعمل في الذاكرة،
-      // لكن نُظهر تحذيراً لأن التقدم لن يبقى بعد إغلاق الصفحة.
       reportStorageState(false);
+      return false;
     }
   }
 
@@ -717,6 +735,8 @@
 
   // الإعدادات والحالة تُقرأ من التخزين مرة واحدة عند الإقلاع، وما بعدها
   // حالة واجهة مؤقتة: خرائط أدوات التحكم، مؤقتات، ومؤشرات لاحظناها.
+  let storageBlocked = false;
+  let storageLoadIssue = null;
   let settings = loadSettings();
   let state = loadState();
   let activePeriod = "morning";
@@ -1150,18 +1170,13 @@
     let best = 0;
     let run = 0;
     let previous = null;
-
     keys.forEach((key) => {
-      if (!isDayComplete(key)) {
-        run = 0;
-        previous = key;
-        return;
-      }
+      if (!isDayComplete(key)) { run = 0; previous = key; return; }
       run = previous && dayDifference(previous, key) === 1 ? run + 1 : 1;
       previous = key;
-      if (run > best) best = run;
+      best = Math.max(best, run);
     });
-    return best;
+    return Math.max(best, sanitizeStats(state.stats).bestStreak);
   }
 
   function getWeekSummary() {
@@ -1711,6 +1726,7 @@
       ok: true,
       days,
       settings: normalizeSettings(raw.settings),
+      stats: sanitizeStats(raw.stats),
       dayCount,
       lastDate: Object.keys(days).sort().slice(-1)[0],
     };
@@ -1737,9 +1753,11 @@
 
     const payload = {
       app: "adkar",
-      version: 1,
+      version: STATE_SCHEMA_VERSION,
+      schemaVersion: STATE_SCHEMA_VERSION,
       exportedAt: settings.lastExportAt,
       days: state.days,
+      stats: sanitizeStats(state.stats),
       settings: { ...settings },
     };
 
@@ -1914,7 +1932,7 @@
     if (!pendingImport) return;
 
     const imported = pendingImport;
-    state = { days: imported.days };
+    state = { schemaVersion: STATE_SCHEMA_VERSION, days: imported.days, stats: imported.stats };
     pruneDays();
     saveState();
 
@@ -1940,7 +1958,7 @@
     const imported = pendingImport;
     const addedDays = Object.keys(imported.days).filter((key) => !state.days[key]).length;
 
-    state = { days: mergeDays(state.days, imported.days) };
+    state = { schemaVersion: STATE_SCHEMA_VERSION, days: mergeDays(state.days, imported.days), stats: { bestStreak: Math.max(sanitizeStats(state.stats).bestStreak, imported.stats.bestStreak) } };
     pruneDays();
     saveState();
 
