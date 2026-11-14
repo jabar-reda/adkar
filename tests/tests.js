@@ -46,7 +46,7 @@ function fail(message) {
   if (app.includes('navigator.locks.request("adkar-progress-write"')) pass("cross-tab writes use the Web Locks API");
   else fail("cross-tab writes are not serialized with Web Locks");
 
-  const explicitIds = [...app.matchAll(/^\\s*id: "([a-z0-9-]+)",\\s*\\n\\s*title:/gm)].map((match) => match[1]);
+  const explicitIds = [...app.matchAll(/^\s*id: "([a-z0-9-]+)",\s*\n\s*title:/gm)].map((match) => match[1]);
   if (explicitIds.length === 37 && new Set(explicitIds).size === explicitIds.length) pass("all 37 dhikr records have unique explicit IDs");
   else fail(`dhikr explicit IDs: ${explicitIds.length} records, ${new Set(explicitIds).size} unique`);
 
