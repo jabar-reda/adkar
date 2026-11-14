@@ -38,6 +38,14 @@ function fail(message) {
   const faviconIco = fs.readFileSync(path.join(ROOT, "favicon.ico"));
   const testsSource = fs.readFileSync(__filename, "utf8");
 
+  const streakUpdate = app.indexOf("state.stats.bestStreak = Math.max(sanitizeStats(state.stats).bestStreak, getBestStreak());");
+  const pruneCall = app.indexOf("pruneDays();", app.indexOf("function setEntry"));
+  if (streakUpdate >= 0 && pruneCall > streakUpdate) pass("best streak is updated before old days are pruned");
+  else fail("best streak must be updated before old days are pruned");
+
+  if (app.includes('navigator.locks.request("adkar-progress-write"')) pass("cross-tab writes use the Web Locks API");
+  else fail("cross-tab writes are not serialized with Web Locks");
+
   /* ===== الصياغة ===== */
   [
     ["app/app.js", app],
@@ -1530,6 +1538,21 @@ async function runAsyncTests() {
     state().days["2026-10-31"].morning[itemKeys.morning1].count === 1 &&
       state().days["2026-10-31"].morning[itemKeys.morning2].count === 1,
     JSON.stringify(state().days["2026-10-31"].morning)
+  );
+
+  /* حماية التخزين التالف */
+  const structurallyCorruptedProgress = JSON.stringify({ days: { "2026-10-31": null } });
+  storage.set("adkar.v1", structurallyCorruptedProgress);
+  dispatchWindowEvent("storage", { key: "adkar.v1" });
+  check(
+    "valid JSON with a malformed day record is treated as corruption",
+    byId.get("storage-warning").hidden === false
+  );
+  pill(0).click();
+  check(
+    "malformed day records are never overwritten",
+    storage.get("adkar.v1") === structurallyCorruptedProgress,
+    storage.get("adkar.v1")
   );
 
   /* حماية التخزين التالف */
