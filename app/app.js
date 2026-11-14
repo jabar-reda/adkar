@@ -2177,6 +2177,8 @@
   // حدث storage يصل إلى كل التبويبات عدا الذي كتب؛ نعيد القراءة
   // من الصفر بدل محاولة الدمج، فالمصدر الأحدث هو التخزين نفسه.
   function reloadStateFromStorage() {
+    storageBlocked = false;
+    storageLoadIssue = null;
     state = loadState();
     renderedDay = dayKey();
     selectedCalendarKey = renderedDay;
