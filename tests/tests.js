@@ -905,7 +905,7 @@ const fakeFile = {
             },
             evening: {},
           },
-          "2026-10-30": {
+          "2026-10-20": {
             morning: { "morning-0": { count: 1, done: true } },
             evening: {},
           },
@@ -1069,7 +1069,7 @@ async function runAsyncTests() {
                 },
                 evening: { "evening-0": { count: 1, done: true } },
               },
-              "2026-10-30": {
+              "2026-10-20": {
                 morning: { "morning-1": { count: 3, done: true } },
                 evening: {},
               },
@@ -1133,10 +1133,10 @@ async function runAsyncTests() {
   check(
     "merge combines both records on an existing day",
     Boolean(
-      state().days["2026-10-30"].morning[itemKeys.morning0] &&
-        state().days["2026-10-30"].morning[itemKeys.morning1]
+      state().days["2026-10-20"].morning[itemKeys.morning0] &&
+        state().days["2026-10-20"].morning[itemKeys.morning1]
     ),
-    JSON.stringify(state().days["2026-10-30"].morning)
+    JSON.stringify(state().days["2026-10-20"].morning)
   );
   check(
     "merge keeps only valid days",
@@ -1533,7 +1533,7 @@ async function runAsyncTests() {
 
   /* ترحيل المفاتيح السابقة إلى المعرّفات الصريحة */
   const migratedProgress = JSON.parse(storage.get("adkar.v1"));
-  migratedProgress.days["2026-10-30"] = {
+  migratedProgress.days["2026-10-20"] = {
     morning: { "morning-0": { count: 1, done: true } },
     evening: { [previousTitleKey("evening", "آية الكرسي")]: { count: 1, done: true } },
     wake: {},
@@ -1543,11 +1543,11 @@ async function runAsyncTests() {
   dispatchWindowEvent("storage", { key: "adkar.v1" });
   check(
     "legacy positional keys migrate to explicit IDs",
-    state().days["2026-10-30"].morning[itemKeys.morning0].count === 1
+    state().days["2026-10-20"].morning[itemKeys.morning0].count === 1
   );
   check(
     "previous title-hash keys migrate to explicit IDs",
-    state().days["2026-10-30"].evening[itemKeys.evening0].count === 1
+    state().days["2026-10-20"].evening[itemKeys.evening0].count === 1
   );
 
   /* وصول تحديث خارجي من تبويب آخر */
