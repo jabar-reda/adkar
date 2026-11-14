@@ -11,6 +11,7 @@
 - [الإعدادات](#الإعدادات)
 - [البنية](#البنية)
 - [الاختبارات](#الاختبارات)
+- [بناء تطبيق أندرويد](#بناء-تطبيق-أندرويد)
 - [الخصوصية](#الخصوصية)
 - [ملاحظات للتطوير](#ملاحظات-للتطوير)
 - [الترخيص](#الترخيص)
@@ -140,9 +141,16 @@ adkar/
 │       ├── ibm-plex-*.woff2      # خط الواجهة (عربي ولاتيني)
 │       ├── LICENSE-AMIRI.txt
 │       └── LICENSE-IBM-PLEX.txt
+├── apk/                  # أدوات بناء APK لـ GitHub Actions فقط
+│   ├── package.json      # Capacitor وأدواته
+│   ├── capacitor.config.json
+│   ├── sign-android.py   # ضبط التوقيع ورقم الإصدار في المشروع المولّد
+│   ├── make-icons.py     # توليد أيقونة التطبيق وشاشة البداية
+│   └── assets/           # icon.png وsplash.png
 ├── tests/
 │   └── tests.js          # كل الاختبارات في ملف واحد
 ├── .github/
+│   ├── workflows/apk.yml     # بناء APK يدوياً في GitHub Actions
 │   └── workflows/tests.yml   # تشغيل الاختبارات في GitHub Actions
 ├── package.json
 ├── README.md
@@ -165,6 +173,21 @@ node tests/tests.js
 ```
 
 - `tests/tests.js`: ملف واحد يشغّل الفحوصات بالتتابع: فحص الصياغة والبنية والمعرّفات والأصول، ثم محاكاة DOM وسلوك التطبيق. يعيد رمز فشل إذا فشل أي فحص، ويشغّله GitHub Actions عند كل دفع أو طلب دمج.
+
+## بناء تطبيق أندرويد
+
+الموقع نفسه لا يُلمس في البناء؛ يُنسخ إلى `apk/www` ويُغلّف بـ Capacitor في WebView:
+
+1. افتح تبويب **Actions** في GitHub ← سير عمل «بناء APK» ← زر **Run workflow**.
+2. **أول بناء فقط**: أدخل كلمة مرور في حقل `keystore_password` — سيولّد Workflow مفتاح توقيع جديداً ويرفعه كـ artifact باسم `adkar-keystore`.
+3. أضف المفتاح إلى **أسرار المستودع** (Settings ← Secrets ← Actions):
+   - `ANDROID_KEYSTORE`: محتوى ملف `adkar.keystore` بترميز base64 (`base64 -w0 adkar.keystore`).
+   - `ANDROID_KEYSTORE_PASSWORD`: كلمة المرور نفسها التي أدخلتها.
+4. البناء اللاحق يحتاج لا حقل ولا سرّاً جديداً — يقرأ المفتاح من الأسرار ويرفع `adkar-apk` جاهزاً للتثبيت.
+
+- رقم الإصدار (`versionCode`/`versionName`) يتزايد تلقائياً مع كل تشغيل.
+- أيقونة التطبيق وشاشة البداية تولَّدان مسبقاً بـ `apk/make-icons.py` (بلا أدوات خارجية)، وأعيد توليدها عند تعديل الهوية.
+- المشروع المولّد `apk/android/` لا يُرفع إلى المستودع، وهو مستثنى في `.gitignore`.
 
 ## الخصوصية
 
