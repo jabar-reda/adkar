@@ -1,3 +1,11 @@
+/* ==========================================================================
+   منطق تطبيق «أذكار الصباح والمساء».
+   تسلسل الملف: الثوابت، فنصوص الأذكار (بيانات فقط)، فالأدوات المساعدة،
+   فالحالة والتخزين، فالإعدادات، فبناء الواجهة وتحديثها، فالإحصاءات
+   (السلسلة والتقويم)، فالعدّاد الكبير، فالنسخ الاحتياطي، وأخيراً ربط
+   الأحداث وبدء التشغيل.
+   كل التقدم يُحفظ في localStorage والصفحة تعمل دون أي اتصال شبكي.
+   ========================================================================== */
 (function () {
   "use strict";
 
@@ -8,8 +16,11 @@
 
   const STORAGE_KEY = CONFIG.storageKeys.state;
   const SETTINGS_KEY = CONFIG.storageKeys.settings;
+  // نحتفظ بآخر 60 يوماً من التقدم فقط حتى لا يتضخم التخزين بلا نهاية.
   const KEEP_DAYS = 60;
+  // حد حجم ملف النسخة الاحتياطية المقبول عند الاستيراد (2 ميغابايت).
   const MAX_BACKUP_BYTES = 2 * 1024 * 1024;
+  // نذكّر المستخدم بتصدير نسخة احتياطية كل أسبوعين.
   const BACKUP_REMINDER_DAYS = 14;
   const ARABIC_DIGITS = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
   const FONT_SIZES = CONFIG.fontSizes;
@@ -18,6 +29,9 @@
   const PERIOD_WINDOWS = CONFIG.periodWindows;
 
   /* ===== الأذكار المشتركة بين الصباح والمساء ===== */
+  // لكل ذكر: العنوان، النص (ayah لسورة أو lines لفواصل)، المصدر، وملاحظة
+  // اختيارية. count هو العدد المطلوب: 1 = مرة واحدة، أكبر من 1 يظهر معه
+  // زر عدّاد، و0 = بلا عدد محدد فيصير زر التسجيل «إنهاء» بلا عدّاد.
   const DHIKR = {
     ayatKursi: {
       title: "آية الكرسي",
@@ -335,6 +349,8 @@
     },
   ];
 
+  // الأقسام الأربعة: الأساسيان (صباح/مساء) يحدّان اكتمال اليوم،
+  // والمكمّلان (استيقاظ/نوم) يظهرمان داخل قسما الأساس دون دخولهما فيه.
   const SECTIONS = {
     morning: {
       name: "أذكار الصباح",
@@ -379,16 +395,20 @@
   };
 
   /* ===== أدوات مساعدة ===== */
+  // تحويل الأرقام اللاتينية إلى مشرقية حتى يظهر كل العدّ بالعربية.
   const toArabicNumber = (value) =>
     String(value).replace(/\d/g, (digit) => ARABIC_DIGITS[Number(digit)]);
 
   const pad2 = (value) => String(value).padStart(2, "0");
 
+  // مفتاح اليوم بصيغة YYYY-MMDD بتوقيت الجهاز المحلي، وهو شكل مفاتيح التخزين.
   const dayKey = (date = new Date()) =>
     `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 
+  // مفتاح فريد لكل ذكر داخل قسمه: "morning-0" مثلاً، وهو نفسه مفتاح التخزين.
   const itemKey = (period, index) => `${period}-${index}`;
 
+  // بنية يوم فارغ لكل الأقسام الأربعة، تُستخدم كأساس آمن للقراءة والكتابة.
   const emptyDay = () => ({ morning: {}, evening: {}, wake: {}, sleep: {} });
 
   const addDays = (date, amount) => {
@@ -397,11 +417,13 @@
     return next;
   };
 
+  // إضافة أشهر عبر اليوم 1 حتى لا تنزلق القيمة عند أشهر 30/31 يوماً.
   const addMonths = (date, amount) =>
     new Date(date.getFullYear(), date.getMonth() + amount, 1);
 
   const startOfMonth = (date) => new Date(date.getFullYear(), date.getMonth(), 1);
 
+  // تحويل مفتاح YYYY-MM-DD إلى تاريخ محلي (الأشهر صفرية الأساس في Date).
   const parseDateKey = (key) => {
     const [year, month, day] = key.split("-").map(Number);
     return new Date(year, month - 1, day);
@@ -413,11 +435,14 @@
     return Math.round((to - from) / 86400000);
   };
 
+  // اكتمال اليوم = إتمام الصباح والمساء معاً؛ الأقسام المكمّلة لا تدخل فيه.
   function isDayComplete(key) {
     return isSectionComplete("morning", key) && isSectionComplete("evening", key);
   }
 
   /* ===== الحالة والتخزين ===== */
+  // يبني نسخة نظيفة آمنة من بيانات يوم واحد: يتجاهل المفاتيح المجهولة،
+  // ويقصّ كل عدّ داخل حدود العدد المطلوب، فلا تفسد بيانات خارجية الواجهة.
   function sanitizeDayRecord(source) {
     const day = emptyDay();
     if (!source || typeof source !== "object" || Array.isArray(source)) return day;
@@ -438,6 +463,8 @@
     return day;
   }
 
+  // يرشّح مفاتيح الأيام: تاريخ حقيقي بصيغة صحيحة لا لاحق لليوم،
+  // ويبقي أحدث KEEP_DAYS يوماً فقط، ويحذف الأيام الفارغة تماماً.
   function sanitizeDays(rawDays) {
     const days = {};
     if (!rawDays || typeof rawDays !== "object" || Array.isArray(rawDays)) return days;
@@ -455,6 +482,8 @@
     return days;
   }
 
+  // قراءة كل التقدم من التخزين؛ أي خلل في البيانات يعني البدء من صفر
+  // بدل تعطل الصفحة، لأن البيانات هنا تأتي من متصفح المستخدم نفسه.
   function loadState() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -491,6 +520,7 @@
     }
   }
 
+  // حذف الأيام الأقدم بعد الحفظ حتى لا يتجاوز المخزون KEEP_DAYS يوماً.
   function pruneDays() {
     const keys = Object.keys(state.days).sort();
     while (keys.length > KEEP_DAYS) {
@@ -501,6 +531,7 @@
   function getDay(key) {
     const day = state.days[key];
     if (!day || typeof day !== "object") return emptyDay();
+    // نعيد نسخاً بأربعة أقسام مضمونة، فلا يكسر غياب قسماً القراءة لاحقاً.
     return {
       morning: day.morning || {},
       evening: day.evening || {},
@@ -515,6 +546,8 @@
     return (record && record[key]) || null;
   }
 
+  // يكتب إدخال ذكر معين في يوم اليوم ثم يحفظ فوراً (حتى لا يضيع
+  // التقدم عند إغلاق الصفحة قبل أي حفظ لاحق).
   function setEntry(period, key, value) {
     const today = dayKey();
     const day = getDay(today);
@@ -544,6 +577,8 @@
   }
 
   /* ===== الإعدادات ===== */
+  // يبني إعدادات سليمة من أي مصدر (تخزين أو ملف استيراد): القيم غير
+  // المعروفة تعود إلى الافتراضي بدل أن تبقى ولا معنى لها.
   function normalizeSettings(raw) {
     if (!raw || typeof raw !== "object") return null;
     const lastExportAt =
@@ -580,6 +615,9 @@
   }
 
   let lastVisualPeriod = null;
+  // يترجم الثيم المختار إلى لون فعلي: ثيم يدوي يلتزم قيمته، و"time"
+  // يتبع الساعة، و"auto" يتبع القسم المعروض حالياً. قيمة lastVisualPeriod
+  // تمنع لمس DOM في كل استدعاء إذا لم يتغير اللون.
   function applyTheme() {
     let visualPeriod;
     if (settings.theme === "morning" || settings.theme === "evening") visualPeriod = settings.theme;
@@ -604,6 +642,8 @@
   }
 
   /* ===== عناصر الصفحة ===== */
+  // تجميع كل عناصر DOM المطلوبة مرة واحدة في البداية بدل البحث
+  // المتكرر؛ الاختبارات تعتمد على أن كل المعرّفات هنا موجودة فعلاً.
   const elements = {
     list: document.getElementById("dhikr-list"),
     title: document.getElementById("period-title"),
@@ -663,28 +703,30 @@
     supplementFill: document.getElementById("supplement-fill"),
   };
 
+  // الإعدادات والحالة تُقرأ من التخزين مرة واحدة عند الإقلاع، وما بعدها
+  // حالة واجهة مؤقتة: خرائط أدوات التحكم، مؤقتات، ومؤشرات لاحظناها.
   let settings = loadSettings();
   let state = loadState();
   let activePeriod = "morning";
   let renderedDay = dayKey();
-  let itemControllers = new Map();
+  let itemControllers = new Map(); // مفتاح الذكر -> أدوات تحكم بطاقته
   let lastAction = null;
   let undoTimer = null;
   let highlightTimer = null;
-  let pendingImport = null;
+  let pendingImport = null; // ملف الاستيراد بانتظار اختيار «دمج» أو «استبدال»
   let touchStart = null;
-  let insightsSignature = "";
-  let previousDone = null;
+  let insightsSignature = ""; // بصمة عدّادات الأقسام لتحديث الإحصاءات عند تغيّرها فقط
+  let previousDone = null; // عدد المكتمل قبل آخر تحديث، لكشف «اكتمل الآن»
   let previousSupplementDone = null;
   let calendarMonth = startOfMonth(new Date());
   let selectedCalendarKey = dayKey();
-  let counterKey = null;
-  let counterOpener = null;
-  let counterResetArmed = false;
+  let counterKey = null; // الذكر المعروض في نافذة العدّاد حالياً
+  let counterOpener = null; // الزر الذي فتح النافذة، لإعادة تركيزه بعد الإغلاق
+  let counterResetArmed = false; // مرحلة تأكيد زر «إعادة العدّ»
   let counterResetTimer = null;
   let celebrationTimer = null;
   let supplementCelebrationTimer = null;
-  let pendingCelebration = null;
+  let pendingCelebration = null; // احتفال مؤجّل حتى إغلاق نافذة العدّاد
   let pendingSupplementCelebration = null;
   let storageWarningShown = false;
 
@@ -724,6 +766,7 @@
   }
 
   function formatHijri(date) {
+    // نضيف «هـ» يدوياً لأن التنسيق الهجري يعطي السنة رقمها فقط.
     return formatters.hijri ? `${formatters.hijri.format(date)}هـ` : "";
   }
 
@@ -733,6 +776,8 @@
     elements.hijriDate.textContent = formatHijri(now);
   }
 
+  // يقسم اليوم إلى صباح/مساء بحسب الساعة الحالية، وهو أساس الثيم "time"
+  // واختيار القسم المبدئي عند فتح الصفحة.
   function detectPeriod() {
     const hour = new Date().getHours();
     const range = PERIOD_WINDOWS.morning;
@@ -740,6 +785,8 @@
   }
 
   /* ===== بناء بطاقة الذكر ===== */
+  // إنشاء <p> بأمان: textContent دائماً لأن نصوص الأذكار قد تُنسخ
+  // من ملف استيراد، فلا يُفسَّر أي شيء كوسوم HTML.
   function paragraph(className, text) {
     const element = document.createElement("p");
     element.className = className;
@@ -759,6 +806,8 @@
     return `تسجيل ${item.title}، أكملت ${toArabicNumber(progress.count)} من ${toArabicNumber(item.count)}`;
   }
 
+  // ترتيب نص الذكر: البسملة إن وردت، فالآية بين قوسين قرآنيين، فالفواصل،
+  // فالمصدر، فالملاحظة — نفس الترتيب في القائمة وفي نافذة العدّاد.
   function appendDhikrText(container, item) {
     if (item.basmala) {
       container.append(paragraph("basmala", "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ"));
@@ -777,6 +826,11 @@
     }
   }
 
+  /* بناء بطاقة ذكر واحدة وإرجاعها.
+     كل بطاقة تُغلق على حالتها الخاصة (progress) ودوالها: paint يعيد
+     رسم الشكل، persist يحفظ في التخزين، increment وresetProgress
+     يعدّلان الحالة ويسجلان إجراءً قابلاً للتراجع. تُجمع المؤشرات في
+     itemControllers لتبقى مفاتيح التراجع والعدّاد تعمل بعد أي إعادة رسم. */
   function createItem(period, item, index) {
     const key = itemKey(period, index);
     const saved = getEntry(period, key);
@@ -843,6 +897,8 @@
       item.count === 0 ? progress.done : progress.count >= item.count;
 
     function paint() {
+      // إعادة رسم البطاقة من قيمة progress الحالية: النص، حالات
+      // aria، وإظهار زر «إعادة» عند وجود تقدم فقط.
       const complete = isComplete();
 
       card.classList.toggle("is-done", complete);
@@ -925,6 +981,8 @@
   }
 
   /* ===== عرض القسم ===== */
+  // إعادة بناء القسم كاملاً: بطاقات الأذكار ثم المجموعة المكمّلة
+  // (الاستيقاظ/النوم) وحالات التبويبات، ثم تحديث كل الأرقام.
   function renderPeriod(period) {
     closeCounter({ celebratePending: false });
     activePeriod = period;
@@ -966,6 +1024,8 @@
     updateTimeLeft();
   }
 
+  // عنوان تبويب المتصفح يعرض المتبقي: مؤشر مختصر يظهر أثناء التنقل
+  // بين التطبيقات دون العودة إلى الصفحة.
   function updateTabTitle(section, done, total) {
     const remaining = total - done;
     document.title =
@@ -981,6 +1041,8 @@
       counts[period] = countCompleted(period);
     });
     const done = counts[activePeriod];
+    // «اكتمل الآن» = صار العدد المساوي للإجمالي وكان أقل منه في التحديث السابق؛
+    // هذا الفرق هو ما يشغّل الاحتفال مرة واحدة لا عند كل تحديث.
     const justCompleted = previousDone !== null && done === total && previousDone < total;
     previousDone = done;
 
@@ -1031,6 +1093,7 @@
     }
 
     const signature = `${counts.morning}:${counts.evening}:${counts.wake}:${counts.sleep}`;
+    // التقويم والسلسلة إعادة حساب مكلفة، فلا نحدثهما إلا حين تتغير الأعداد.
     if (signature !== insightsSignature) {
       insightsSignature = signature;
       renderInsights();
@@ -1051,6 +1114,10 @@
       : `${date.getMonth() + 1}/${date.getFullYear()}`;
   }
 
+  /* ===== التقدم: السلسلة والملخص والتقويم ===== */
+  // السلسلة الحالية: نبدأ من اليوم إن كان مكتملاً وإلا من الأمس
+  // (ليستسع اليوم الجاري دون أن يقطع سلسلة الأمس)، ثم نعدّ الأيام
+  // المكتملة المتتالية إلى الوراء حتى أول انقطاع.
   function getCurrentStreak() {
     let cursor = new Date();
     if (!isDayComplete(dayKey(cursor))) cursor = addDays(cursor, -1);
@@ -1064,6 +1131,8 @@
     return streak;
   }
 
+  // أفضل سلسلة: نمرّ على أيام التخزين المرتبة ونعيد أبعد امتداد
+  // متتالٍ (فرق يوم واحد بين يومَين مكتملَين)؛ أي يوم ناقص يبدأ عدّاً جديداً.
   function getBestStreak() {
     const keys = Object.keys(state.days).sort();
     let best = 0;
@@ -1236,11 +1305,15 @@
   }
 
   function celebrate(section) {
+    // إن كانت نافذة العدّاد مفتوحة نؤجل الاحتفال إلى الإغلاق،
+    // حتى لا تختفي الحركة خلف التعتيم دون أن يراها المستخدم.
     if (elements.counterDialog && elements.counterDialog.open) {
       pendingCelebration = section;
       return;
     }
     elements.progressBar.classList.remove("is-celebrating");
+    // قراءة offsetWidth تجبر المتصفح على إعادة الحساب، فتبدأ
+    // الحركة من صفر ولو كان الصنف مضافاً قبل لحظات.
     void elements.progressBar.offsetWidth;
     elements.progressBar.classList.add("is-celebrating");
     clearTimeout(celebrationTimer);
@@ -1270,6 +1343,8 @@
   }
 
   /* ===== العدّاد الكبير ===== */
+  // مزامنة النافذة مع تقدم الذكر المفتوح فيها: الرقم، الشريط،
+  // وحالات زرّي العدّ والإعادة.
   function updateCounterUI() {
     const controller = counterKey ? itemControllers.get(counterKey) : null;
     if (!controller) return;
@@ -1288,6 +1363,8 @@
     if (elements.counterReset.disabled) disarmCounterReset();
   }
 
+  // إعادة زر الإعادة من حالة التأكيد إلى حالته العادية (انتهت مهلتها
+  // أو تم الإلغاء) — تُستدعى في كل فتح للنافذة وكل ضغطة عدّ.
   function disarmCounterReset() {
     counterResetArmed = false;
     clearTimeout(counterResetTimer);
@@ -1296,6 +1373,8 @@
     elements.counterReset.classList.remove("is-confirming");
   }
 
+  // فتح نافذة العدّاد لذكر معين: نسخ نصه إليها، تثبيت من فتحها
+  // لإعادة التركيز إليه لاحقاً، ثم إظهارها بـ <dialog> إن توفر.
   function openCounter(key, opener) {
     const controller = itemControllers.get(key);
     if (!controller || !elements.counterDialog || elements.counterDialog.open) return;
@@ -1317,6 +1396,8 @@
     elements.counterButton.focus({ preventScroll: true });
   }
 
+  // تنظيف بعد إغلاق النافذة: إعادة التركيز إلى الزر الفاتح،
+  // وتنفيذ أي احتفال كان مؤجلاً خلفها.
   function handleCounterClosed() {
     document.body.classList.remove("is-dialog-open");
     counterKey = null;
@@ -1377,6 +1458,8 @@
     const controller = counterKey ? itemControllers.get(counterKey) : null;
     if (!controller) return;
 
+    // إعادة العدّ بخطوتين: أول ضغطة تفعّل التأكيد لمدة 4 ثوانٍ،
+    // والثانية خلالها هي التي تمسح العدّ فعلاً.
     if (!counterResetArmed) {
       counterResetArmed = true;
       elements.counterReset.textContent = "اضغط مرة أخرى للتأكيد";
@@ -1398,11 +1481,14 @@
   elements.counterDialog.addEventListener("close", handleCounterClosed);
 
   /* ===== الإعلانات لقارئ الشاشة ===== */
+  // منطقة aria-live: تغيير نصها يُعلن تلقائياً دون تحريك التركيز.
   function announce(message) {
     elements.live.textContent = message;
   }
 
   /* ===== الوقت المتبقي في النافذة ===== */
+  /* ===== الوقت المتبقي في النافذة ===== */
+  // صياغة عربية سليمة للعدد: واحد/اثنان/٣-١٠ جمع/أكثر من عشرة مفرد.
   function formatUnit(value, one, two, many) {
     if (value === 1) return one;
     if (value === 2) return two;
@@ -1423,6 +1509,9 @@
   }
 
   function describePeriodTime(period, now) {
+    // نافذة المساء تعبر منتصف الليل (15:00 -> 04:00)، فنميّز الحالة
+    // المغلِفة: داخل النافذة قبل أو بعد منتصف الليل، ونحسب النهاية
+    // في اليوم التالي إن لزم، وإلا نعلن موعد البداية القادمة.
     const range = PERIOD_WINDOWS[period];
     const hour = now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
     const wraps = range.end <= range.start;
@@ -1454,6 +1543,9 @@
   }
 
   /* ===== الانتقال إلى أول ذكر غير مكتمل ===== */
+  /* ===== الانتقال إلى أول ذكر غير مكتمل ===== */
+  // التمرير السلس إلى أول ذكر ناقص مع إبرازه وإعطاء زر تسجيله
+  // التركيز؛ من طلب تقليل الحركة يُمرَّر فوراً بلا سلاسة.
   function goToNextIncomplete() {
     const section = SECTIONS[activePeriod];
     const record = getDay(dayKey())[activePeriod];
@@ -1484,6 +1576,9 @@
   }
 
   /* ===== التراجع عن آخر إجراء ===== */
+  /* ===== التراجع عن آخر إجراء ===== */
+  // شريط التراجع يحتفظ بنسخة «قبل» من الإدخال؛ إن لم يُلغَ خلال
+  // 5 ثوانٍ يختفي ويُنسى الإجراء.
   function showUndo(key, title, before, actionLabel) {
     lastAction = { key, title, before };
     elements.undoText.textContent = `${actionLabel}: ${title}`;
@@ -1513,6 +1608,7 @@
   }
 
   /* ===== النسخ الاحتياطي ===== */
+  // رسائل الحالة تنطق بلون الخطأ عند الفشل (is-error) وإلا بلون عادي.
   function setBackupStatus(message, isError = false) {
     elements.backupStatus.textContent = message;
     elements.backupStatus.classList.toggle("is-error", isError);
@@ -1567,6 +1663,8 @@
     }
   }
 
+  // التحقق من أن التاريخ حقيقي فعلاً: "2026-02-30" يطابق النمط لكن
+  // Date يلفه إلى مارس، فنقارن المكونات بعد الإنشاء لتكتشف هذا.
   function isRealDateKey(key) {
     const [year, month, day] = key.split("-").map(Number);
     const date = new Date(year, month - 1, day);
@@ -1581,6 +1679,8 @@
     return formatters.backupDate.format(new Date(year, month - 1, day));
   }
 
+  // ملف النسخة يمر على نفس دوال التطهير (sanitizeDays + normalizeSettings)
+  // فلا يدخل التخزين منه شيء غير متوقع، ولو كان مشيناً بالكامل.
   function validateBackup(raw) {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
       return { ok: false, reason: "بنية الملف غير صالحة." };
@@ -1604,6 +1704,8 @@
     };
   }
 
+  // تنزيل ملف عبر رابط object-URL مؤقت: ننشئ العنصر ديناميكياً ثم
+  // ننظّف الرابط بعدها حتى لا يتسرب الذاكرة.
   function downloadFile(content, filename, type) {
     const blob = new Blob([content], { type });
     const url = URL.createObjectURL(blob);
@@ -1643,6 +1745,8 @@
     );
   }
 
+  // حماية خلية CSV: من يضمّن فاصلة أو اقتباساً أو سطراً جديداً يُغلف
+  // بعلامات تنصيص مع مضاعفة كل اقتباس داخلي.
   function csvCell(value) {
     const text = String(value);
     return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
@@ -1687,6 +1791,7 @@
       ]);
     });
 
+    // BOM في بداية الملف يجعل Excel يقرأه UTF-8 فتظهر العربية سليمة.
     const csv =
       "\uFEFF" + rows.map((row) => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
 
@@ -1694,6 +1799,8 @@
     setBackupStatus(`تم تصدير ${formatDayTotal(keys.length)} إلى CSV.`);
   }
 
+  /* ===== النسخ الاحتياطي ===== */
+  /* (تكملة: قراءة ملف الاستيراد وعرض معاينة قبل الدمج أو الاستبدال) */
   function handleImportFile(file) {
     if (!file) return;
 
@@ -1732,6 +1839,8 @@
       });
   }
 
+  // قاعدة الدمج لذكر واحد: لا ينخفض أي عدد أبداً — نأخذ الأكبر بين
+  // الحالي والمستورد؛ والأذكار بلا عدد تكتمل إذا اكتملت في أي جهة.
   function mergeItemEntry(item, currentEntry, importedEntry) {
     if (!currentEntry && !importedEntry) return null;
 
@@ -1837,6 +1946,9 @@
     renderPeriod(tab.dataset.period);
   });
 
+  /* ===== التبويبات ===== */
+  // التنقل بلوحة المفاتيح على نمط WAI-ARIA: الأسهم والمنزل والنهاية
+  // في اتجاه RTL — ArrowLeft يتقدم لأن الصفحة من اليمين إلى اليسار.
   elements.tablist.addEventListener("keydown", (event) => {
     const order = ["morning", "evening"];
     const current = order.indexOf(activePeriod);
@@ -1907,6 +2019,10 @@
   });
 
   /* ===== السحب الأفقي بين القسمين ===== */
+  // نتابع اللمس على الصفحة نفسها فقط: لا أزرار ولا حقول ولا التذييل.
+  // عند الإفلات نقبل السحبة إن كانت أفقية بوضوح (طول ≥ 60 بكسل،
+  // أفقي أكبر من عمودي 1.5 مرة)، وبدأت بعيداً عن حواف الشاشة،
+  // وليس أثناء تحديد نص — ثم نبدّل القسم حسب اتجاه السحب.
   elements.page.addEventListener(
     "touchstart",
     (event) => {
@@ -1962,6 +2078,8 @@
   );
 
   /* ===== إعادة تعيين اليوم (بخطوتين) ===== */
+  // نفس نمط تأكيد العدّاد: أول ضغطة تفعّل التأكيد أربع ثوانٍ،
+  // والثانية خلالها تمسح تقدم اليوم بالكامل.
   let resetTimer = null;
 
   function cancelReset() {
@@ -1988,6 +2106,9 @@
   });
 
   /* ===== تغيّر اليوم أثناء بقاء الصفحة مفتوحة ===== */
+  /* ===== تغيّر اليوم أثناء بقاء الصفحة مفتوحة ===== */
+  // إذا مرّ منتصف الليل والصفحة ما زالت مفتوحة نعيد رسم اليوم
+  // الجديد: التاريخ، التقويم، وقوائم الأذكار تُفرغ من تلقاء نفسها.
   function checkDayChange() {
     if (renderedDay === dayKey()) return;
     renderedDay = dayKey();
@@ -2005,6 +2126,8 @@
     updateBackupReminder();
   });
 
+  // فحص خفيف دوري: تغيّر اليوم كل دقيقة، والوقت المتبقي والثيم
+  // المعتمد على الساعة كل 30 ثانية.
   setInterval(checkDayChange, 60000);
   setInterval(() => {
     updateTimeLeft();
@@ -2012,6 +2135,8 @@
   }, 30000);
 
   /* ===== المزامنة بين التبويبات ===== */
+  // حدث storage يصل إلى كل التبويبات عدا الذي كتب؛ نعيد القراءة
+  // من الصفر بدل محاولة الدمج، فالمصدر الأحدث هو التخزين نفسه.
   function reloadStateFromStorage() {
     state = loadState();
     renderedDay = dayKey();
@@ -2050,6 +2175,8 @@
   });
 
   /* ===== بدء التشغيل ===== */
+  // بترتيب معتمد: مزامنة أزرار الإعدادات مع ما قرأنا، فحجم الخط،
+  // فالتاريخ، فتذكير النسخة، ثم رسم القسم الذي يناسب الساعة الآن.
   syncSettingsUI();
   applyFontSize();
   updateDates();

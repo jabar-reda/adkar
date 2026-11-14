@@ -1,4 +1,7 @@
 <!DOCTYPE html>
+<!-- صفحة واحدة تعمل دون خادم ولا اتصال: الهيكل ثابت، وapp.js يرسم
+     الأذكار ويحفظ التقدم في localStorage. كل معرف هنا يشير إليه
+     app.js عبر getElementById (يفحصه الاختبارات). -->
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
@@ -10,6 +13,8 @@
   <link rel="icon" type="image/svg+xml" href="app/favicon.svg">
   <meta name="theme-color" content="#0d6a4d">
 
+  <!-- ترتيب التحميل مقصود: config.js يوفر القيم المشتركة، ثم theme-init.js
+       يضبط الألوان وحجم الخط قبل أن يُقرأ styles.css فلا يومض الثيم الافتراضي. -->
   <script src="app/config.js"></script>
   <script src="app/theme-init.js"></script>
 
@@ -27,6 +32,8 @@
     </header>
 
     <div class="tabs-wrap">
+      <!-- تبويب القسم: قائمة تبويبات WAI-ARIA كاملة (role="tablist")،
+           وapp.js يحدّث aria-selected وtabIndex والعدّ داخل tab-count. -->
       <nav class="period-tabs" role="tablist" aria-label="اختيار القسم">
         <button
           type="button"
@@ -57,6 +64,8 @@
     </div>
 
     <main>
+      <!-- لوحة القسم النشط: العنوان والوقت المتبقي وشريط التقدم وزر «التالي».
+           قوائم الأذكار والملاحق تُبنى كاملة بجافاسكربت في العناصر الفارغة أدناه. -->
       <section class="period-panel" aria-labelledby="period-title">
         <div class="period-head">
           <div>
@@ -88,6 +97,8 @@
 
       <ol class="dhikr-list" id="dhikr-list" role="tabpanel" aria-labelledby="tab-morning"></ol>
 
+      <!-- المجموعة المكمّلة (أذكار الاستيقاظ/النوم): مخفية افتراضياً
+           ويظهرها app.js عند القسم التابع لها -->
       <section
         class="supplement"
         id="supplement-group"
@@ -125,6 +136,8 @@
     </main>
 
     <footer class="site-footer">
+      <!-- إحصاءات التقدم: السلسلتان والملخص الأسبوعي والتقويم الشهري،
+           تملؤها renderInsights عند تغيّر العدّادات -->
       <section class="insights" aria-labelledby="insights-title">
         <h2 class="insights-title" id="insights-title">التقدم</h2>
 
@@ -166,6 +179,8 @@
         </div>
       </section>
 
+      <!-- الإعدادات: أزرار aria-pressed يديرها app.js مع الحفظ في التخزين.
+           حقل الاستيراد مخفي؛ زر «استيراد نسخة» ينقره بالوكالة. -->
       <section class="settings" aria-labelledby="settings-title">
         <h2 class="settings-title" id="settings-title">الإعدادات</h2>
 
@@ -223,6 +238,8 @@
     </footer>
   </div>
 
+  <!-- نافذة العدّاد: عنصر <dialog> أصلي، يفتحه app.js بـ showModal
+       ويغلق تلقائياً بمفتاح Escape؛ المحتوى يتغير حسب الذكر المفتوح -->
   <dialog class="counter-dialog" id="counter-dialog" aria-labelledby="counter-title">
     <div class="counter-head">
       <h2 id="counter-title"></h2>
@@ -239,13 +256,16 @@
     </div>
   </dialog>
 
+  <!-- شريط التراجع يطفو أسفل الشاشة 5 ثوانٍ بعد كل إجراء -->
   <div class="undo-bar" id="undo-bar" hidden>
     <span id="undo-text"></span>
     <button type="button" id="undo-button" aria-label="تراجع عن آخر إجراء">تراجع</button>
   </div>
 
+  <!-- منطقة الإعلانات لقارئ الشاشة: يكتب app.js الرسائل فيها فتُنطق تلقائياً -->
   <p class="sr-only" id="live" aria-live="polite"></p>
 
+  <!-- آخر سكربت: ينتظر اكتمال DOM لأنه في نهاية body -->
   <script src="app/app.js"></script>
 </body>
 </html>

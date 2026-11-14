@@ -11,6 +11,7 @@
   };
 
   var settings = {};
+  // قد يكون التخزين فارغاً أو مرفوعاً (وضع خاص في المتصفح)، فنبدأ بقيم فارغة بدل التعطل.
   try {
     settings = JSON.parse(localStorage.getItem(settingsKey)) || {};
   } catch (error) {
@@ -25,6 +26,8 @@
   var period = theme === "morning" || theme === "evening" ? theme : autoPeriod;
   var fontSize = sizes.indexOf(settings.fontSize) >= 0 ? settings.fontSize : "medium";
 
+  // ضبط data-period وdata-font-size على عنصر html هنا يلغي "وميض" الثيم
+  // الافتراضي، لأن CSS يقرأ هذه الخاصيتين عند أول رسم.
   document.documentElement.dataset.period = period;
   document.documentElement.dataset.fontSize = fontSize;
 })();
