@@ -1514,6 +1514,21 @@ async function runAsyncTests() {
     document.documentElement.dataset.fontSize
   );
 
+  /* حماية التخزين التالف */
+  const corruptedProgress = "{ invalid json";
+  storage.set("adkar.v1", corruptedProgress);
+  dispatchWindowEvent("storage", { key: "adkar.v1" });
+  check(
+    "corrupted progress displays a warning",
+    byId.get("storage-warning").hidden === false
+  );
+  pill(0).click();
+  check(
+    "corrupted progress is never overwritten by an automatic save",
+    storage.get("adkar.v1") === corruptedProgress,
+    storage.get("adkar.v1")
+  );
+
 }
 
 await runAsyncTests();
