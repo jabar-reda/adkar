@@ -458,9 +458,29 @@
   }
   const legacyItemKey = (period, index) => period + "-" + index;
   const sanitizeStats = (raw) => {
-    const value = Number(raw && raw.bestStreak);
-    return { bestStreak: Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0 };
+    const best = Number(raw && raw.bestStreak);
+    const current = Number(raw && raw.currentStreak);
+    const date = raw && typeof raw.currentStreakDate === "string" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(raw.currentStreakDate) &&
+      isRealDateKey(raw.currentStreakDate) && raw.currentStreakDate <= dayKey()
+      ? raw.currentStreakDate
+      : null;
+    return {
+      bestStreak: Number.isFinite(best) ? Math.max(0, Math.floor(best)) : 0,
+      currentStreak: date && Number.isFinite(current) ? Math.max(0, Math.floor(current)) : 0,
+      currentStreakDate: date,
+    };
   };
+
+  function mergeStats(...sources) {
+    const values = sources.map(sanitizeStats);
+    const bestStreak = Math.max(0, ...values.map((value) => value.bestStreak));
+    const latestDate = values.map((value) => value.currentStreakDate).filter(Boolean).sort().slice(-1)[0] || null;
+    const currentStreak = latestDate
+      ? Math.max(0, ...values.filter((value) => value.currentStreakDate === latestDate).map((value) => value.currentStreak))
+      : 0;
+    return { bestStreak, currentStreak, currentStreakDate: latestDate };
+  }
 
   // بنية يوم فارغ لكل الأقسام الأربعة، تُستخدم كأساس آمن للقراءة والكتابة.
   const emptyDay = () => ({ morning: {}, evening: {}, wake: {}, sleep: {} });
@@ -541,19 +561,34 @@
     return true;
   }
 
+  function isSanitizedDayComplete(day) {
+    return ["morning", "evening"].every((period) =>
+      SECTIONS[period].items.every((item) => isItemComplete(item, day[period][itemKey(period, item)]))
+    );
+  }
+
   function sanitizeDays(rawDays) {
     const days = {};
     if (!rawDays || typeof rawDays !== "object" || Array.isArray(rawDays)) return days;
     const today = dayKey();
-    const keys = Object.keys(rawDays)
+    const yesterday = dayKey(addDays(new Date(), -1));
+    const candidates = Object.keys(rawDays)
       .filter((key) => /^\d{4}-\d{2}-\d{2}$/.test(key) && isRealDateKey(key) && key <= today)
       .sort()
-      .slice(-KEEP_DAYS);
-    keys.forEach((key) => {
+      .slice(-(KEEP_DAYS + 1));
+    const sanitized = {};
+    candidates.forEach((key) => {
       const day = sanitizeDayRecord(rawDays[key]);
-      if (Object.keys(SECTIONS).some((period) => Object.keys(day[period]).length > 0)) {
-        days[key] = day;
-      }
+      if (Object.keys(SECTIONS).some((period) => Object.keys(day[period]).length > 0)) sanitized[key] = day;
+    });
+    // نحتفظ بيوم إضافي مؤقتاً إذا كان اليوم قيد الإنجاز والأمس مكتملاً.
+    const preserveStreakBridge = Boolean(
+      sanitized[today] && !isSanitizedDayComplete(sanitized[today]) &&
+      sanitized[yesterday] && isSanitizedDayComplete(sanitized[yesterday])
+    );
+    const selected = candidates.slice(-(KEEP_DAYS + (preserveStreakBridge ? 1 : 0)));
+    selected.forEach((key) => {
+      if (sanitized[key]) days[key] = sanitized[key];
     });
     return days;
   }
@@ -598,6 +633,7 @@
   function saveState() {
     if (storageBlocked) { reportStorageState(false); return false; }
     state.schemaVersion = STATE_SCHEMA_VERSION;
+    updateStreakStats();
     state.stats = sanitizeStats(state.stats);
     state.stats.bestStreak = Math.max(state.stats.bestStreak, getBestStreak());
     const localSnapshot = JSON.parse(JSON.stringify(state));
@@ -623,10 +659,11 @@
           return;
         }
         const merged = mergeConcurrentState(baseSnapshot, localSnapshot, remote);
-        merged.stats.bestStreak = Math.max(merged.stats.bestStreak, getBestStreak());
         state = merged;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-        lastPersistedState = JSON.parse(JSON.stringify(merged));
+        updateStreakStats();
+        state.stats.bestStreak = Math.max(state.stats.bestStreak, getBestStreak());
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        lastPersistedState = JSON.parse(JSON.stringify(state));
         reportStorageState(true);
       }).catch(() => {
         storageLoadIssue = "تعذّر حفظ التقدم داخل قفل المزامنة. بقي التقدم في الذاكرة ولم نكتب فوق البيانات.";
@@ -646,10 +683,15 @@
     }
   }
 
-  // حذف الأيام الأقدم بعد الحفظ حتى لا يتجاوز المخزون KEEP_DAYS يوماً.
+  // نحدّث إحصاءات السلسلة قبل التقليم، ونحتفظ بجسر يوم إضافي حتى يكتمل يوم اليوم.
   function pruneDays() {
+    updateStreakStats();
+    const today = dayKey();
+    const yesterday = dayKey(addDays(new Date(), -1));
+    const preserveStreakBridge = !isDayComplete(today) && isDayComplete(yesterday);
+    const limit = KEEP_DAYS + (preserveStreakBridge ? 1 : 0);
     const keys = Object.keys(state.days).sort();
-    while (keys.length > KEEP_DAYS) {
+    while (keys.length > limit) {
       delete state.days[keys.shift()];
     }
   }
@@ -679,8 +721,6 @@
     const day = getDay(today);
     day[period][key] = value;
     state.days[today] = day;
-    // نسجل السلسلة قبل حذف أقدم التفاصيل؛ وإلا لن تتجاوز القيمة حد KEEP_DAYS.
-    state.stats.bestStreak = Math.max(sanitizeStats(state.stats).bestStreak, getBestStreak());
     pruneDays();
     saveState();
   }
@@ -1250,17 +1290,52 @@
   // السلسلة الحالية: نبدأ من اليوم إن كان مكتملاً وإلا من الأمس
   // (ليستسع اليوم الجاري دون أن يقطع سلسلة الأمس)، ثم نعدّ الأيام
   // المكتملة المتتالية إلى الوراء حتى أول انقطاع.
-  function getCurrentStreak() {
-    let cursor = new Date();
-    if (!isDayComplete(dayKey(cursor))) cursor = addDays(cursor, -1);
-
+  function getStreakEndingAt(endKey) {
+    let cursor = parseDateKey(endKey);
     let streak = 0;
-    for (let index = 0; index < KEEP_DAYS; index += 1) {
+    for (let index = 0; index < KEEP_DAYS + 1; index += 1) {
       if (!isDayComplete(dayKey(cursor))) break;
       streak += 1;
       cursor = addDays(cursor, -1);
     }
     return streak;
+  }
+
+  function updateStreakStats() {
+    const stats = sanitizeStats(state.stats);
+    const today = dayKey();
+    const yesterday = dayKey(addDays(new Date(), -1));
+    if (isDayComplete(today)) {
+      if (stats.currentStreakDate !== today) {
+        const previousStreak = isDayComplete(yesterday)
+          ? (stats.currentStreakDate === yesterday ? stats.currentStreak : getStreakEndingAt(yesterday))
+          : 0;
+        stats.currentStreak = previousStreak + 1;
+        stats.currentStreakDate = today;
+      }
+      state.stats = stats;
+      stats.bestStreak = Math.max(stats.bestStreak, stats.currentStreak, getBestStreak());
+    } else if (stats.currentStreakDate === today) {
+      if (isDayComplete(yesterday)) {
+        stats.currentStreak = Math.max(0, stats.currentStreak - 1);
+        stats.currentStreakDate = yesterday;
+      } else {
+        stats.currentStreak = 0;
+        stats.currentStreakDate = null;
+      }
+    }
+    state.stats = stats;
+  }
+
+  function getCurrentStreak() {
+    const today = dayKey();
+    const yesterday = dayKey(addDays(new Date(), -1));
+    const stats = sanitizeStats(state.stats);
+    if (stats.currentStreakDate === today && isDayComplete(today)) return stats.currentStreak;
+    if (stats.currentStreakDate === yesterday && isDayComplete(yesterday)) return stats.currentStreak;
+    let cursor = new Date();
+    if (!isDayComplete(today)) cursor = addDays(cursor, -1);
+    return getStreakEndingAt(dayKey(cursor));
   }
 
   // أفضل سلسلة: نمرّ على أيام التخزين المرتبة ونعيد أبعد امتداد
@@ -2064,13 +2139,7 @@
     return {
       schemaVersion: STATE_SCHEMA_VERSION,
       days: sanitizeDays(mergedDays),
-      stats: {
-        bestStreak: Math.max(
-          sanitizeStats(baseState.stats).bestStreak,
-          sanitizeStats(localState.stats).bestStreak,
-          sanitizeStats(remoteState.stats).bestStreak
-        ),
-      },
+      stats: mergeStats(baseState.stats, localState.stats, remoteState.stats),
     };
   }
 
@@ -2120,7 +2189,7 @@
     // الدمج الصريح يسمح بالاسترداد من نسخة سليمة إذا كان التخزين السابق تالفاً.
     storageBlocked = false;
     storageLoadIssue = null;
-    state = { schemaVersion: STATE_SCHEMA_VERSION, days: mergeDays(state.days, imported.days), stats: { bestStreak: Math.max(sanitizeStats(state.stats).bestStreak, imported.stats.bestStreak) } };
+    state = { schemaVersion: STATE_SCHEMA_VERSION, days: mergeDays(state.days, imported.days), stats: mergeStats(state.stats, imported.stats) };
     pruneDays();
     saveState();
 
