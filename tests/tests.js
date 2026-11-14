@@ -6,6 +6,28 @@ const vm = require("vm");
 
 const ROOT = path.join(__dirname, "..");
 const read = (name) => fs.readFileSync(path.join(ROOT, name), "utf8");
+const APP_SOURCE = read("app/app.js");
+const DHIKR_SHARED_SOURCE = APP_SOURCE.slice(
+  APP_SOURCE.indexOf("const DHIKR = {"),
+  APP_SOURCE.indexOf("/* ===== أذكار الصباح")
+);
+const SHARED_DHIKR_IDS = new Map(
+  [...DHIKR_SHARED_SOURCE.matchAll(/^\\s{4}(\\w+): {\\s*\\n\\s{6}id: "([^"]+)"/gm)]
+    .map((match) => [match[1], match[2]])
+);
+const DHIKR_COUNTS = new Map(
+  [...APP_SOURCE.matchAll(/id: "([^"]+)",\\s*\\n\\s*title: "[^"]+",\\s*\\n\\s*count: (\\d+)/g)]
+    .map((match) => [match[1], Number(match[2])])
+);
+function getSectionItemIds(name, endMarker) {
+  const start = APP_SOURCE.indexOf("const " + name + " = [");
+  const end = APP_SOURCE.indexOf(endMarker, start);
+  const block = APP_SOURCE.slice(start, end);
+  return [...block.matchAll(/DHIKR\\.(\\w+)|id: "([^"]+)"/g)]
+    .map((match) => match[1] ? SHARED_DHIKR_IDS.get(match[1]) : match[2]);
+}
+const MORNING_ITEM_IDS = getSectionItemIds("MORNING_ITEMS", "/* ===== أذكار الاستيقاظ");
+const EVENING_ITEM_IDS = getSectionItemIds("EVENING_ITEMS", "/* ===== أذكار النوم");
 
 let passed = 0;
 let failed = 0;
@@ -38,10 +60,9 @@ function fail(message) {
   const faviconIco = fs.readFileSync(path.join(ROOT, "favicon.ico"));
   const testsSource = fs.readFileSync(__filename, "utf8");
 
-  const streakUpdate = app.indexOf("state.stats.bestStreak = Math.max(sanitizeStats(state.stats).bestStreak, getBestStreak());");
-  const pruneCall = app.indexOf("pruneDays();", app.indexOf("function setEntry"));
-  if (streakUpdate >= 0 && pruneCall > streakUpdate) pass("best streak is updated before old days are pruned");
-  else fail("best streak must be updated before old days are pruned");
+  const pruneBody = app.slice(app.indexOf("function pruneDays"), app.indexOf("function getDay", app.indexOf("function pruneDays")));
+  if (pruneBody.indexOf("updateStreakStats();") >= 0 && pruneBody.indexOf("updateStreakStats();") < pruneBody.indexOf("delete state.days")) pass("streak statistics update before day pruning");
+  else fail("streak statistics must update before day pruning");
 
   if (app.includes('navigator.locks.request("adkar-progress-write"')) pass("cross-tab writes use the Web Locks API");
   else fail("cross-tab writes are not serialized with Web Locks");
@@ -1529,6 +1550,52 @@ async function runAsyncTests() {
     "a storage event applies settings from another tab",
     document.documentElement.dataset.fontSize === "large",
     document.documentElement.dataset.fontSize
+  );
+
+  /* اختبار سلسلة تتجاوز نافذة الاحتفاظ */
+  const completeRecord = (period, ids) => Object.fromEntries(ids.map((id) => {
+    const count = DHIKR_COUNTS.get(id);
+    return [period + "-" + id, count === 0 ? { count: 0, done: true } : { count, done: true }];
+  }));
+  const longStreakDays = {};
+  const startDate = new RealDate(2026, 9, 31);
+  for (let offset = 60; offset >= 1; offset -= 1) {
+    const date = new RealDate(startDate);
+    date.setDate(date.getDate() - offset);
+    const key = [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+    longStreakDays[key] = {
+      morning: completeRecord("morning", MORNING_ITEM_IDS),
+      evening: completeRecord("evening", EVENING_ITEM_IDS),
+      wake: {},
+      sleep: {},
+    };
+  }
+  storage.set("adkar.v1", JSON.stringify({ schemaVersion: 2, days: longStreakDays, stats: { bestStreak: 0 } }));
+  dispatchWindowEvent("storage", { key: "adkar.v1" });
+  tabMorning.click();
+  MORNING_ITEM_IDS.forEach((id, index) => {
+    const button = pill(index);
+    while (!button.classList.contains("is-done")) button.click();
+  });
+  tabEvening.click();
+  EVENING_ITEM_IDS.forEach((id, index) => {
+    const button = pill(index);
+    while (!button.classList.contains("is-done")) button.click();
+  });
+  check(
+    "best streak preserves a 61-day run across pruning",
+    state().stats.bestStreak === 61,
+    JSON.stringify(state().stats)
+  );
+  check(
+    "current streak remains accurate after pruning",
+    state().stats.currentStreak === 61 && state().stats.currentStreakDate === "2026-10-31",
+    JSON.stringify(state().stats)
+  );
+  check(
+    "day details remain bounded after a long streak",
+    Object.keys(state().days).length === 60,
+    String(Object.keys(state().days).length)
   );
 
   /* ترحيل المفاتيح السابقة إلى المعرّفات الصريحة */
