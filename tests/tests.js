@@ -905,7 +905,7 @@ const fakeFile = {
             },
             evening: {},
           },
-          "2026-10-20": {
+          "2026-10-30": {
             morning: { "morning-0": { count: 1, done: true } },
             evening: {},
           },
@@ -1069,7 +1069,7 @@ async function runAsyncTests() {
                 },
                 evening: { "evening-0": { count: 1, done: true } },
               },
-              "2026-10-20": {
+              "2026-10-30": {
                 morning: { "morning-1": { count: 3, done: true } },
                 evening: {},
               },
@@ -1133,10 +1133,10 @@ async function runAsyncTests() {
   check(
     "merge combines both records on an existing day",
     Boolean(
-      state().days["2026-10-20"].morning[itemKeys.morning0] &&
-        state().days["2026-10-20"].morning[itemKeys.morning1]
+      state().days["2026-10-30"].morning[itemKeys.morning0] &&
+        state().days["2026-10-30"].morning[itemKeys.morning1]
     ),
-    JSON.stringify(state().days["2026-10-20"].morning)
+    JSON.stringify(state().days["2026-10-30"].morning)
   );
   check(
     "merge keeps only valid days",
