@@ -1,11 +1,329 @@
+// اختبارات douaa-tracker كلها في ملف واحد: البنية، محاكاة DOM، التثبيت، وService Worker.
+// الاستخدام: node tests/tests.js أو npm test
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
+const ROOT = path.join(__dirname, "..");
+const read = (name) => fs.readFileSync(path.join(ROOT, name), "utf8");
+
+let passed = 0;
+let failed = 0;
+
+function check(label, condition, details = "") {
+  if (condition) {
+    passed += 1;
+    console.log(`PASS ${label}`);
+  } else {
+    failed += 1;
+    console.log(`FAIL ${label}${details ? " -> " + details : ""}`);
+  }
+}
+
+function pass(message) {
+  check(message, true);
+}
+
+function fail(message) {
+  check(message, false);
+}
+
+/* ===== 1) البنية والملفات ===== */
+(function runStaticChecks() {
+  const html = read("index.html");
+  const app = read("app/app.js");
+  const themeInit = read("app/theme-init.js");
+  const css = read("app/styles.css");
+  const faviconSvg = read("app/favicon.svg");
+  const faviconIco = fs.readFileSync(path.join(ROOT, "favicon.ico"));
+  const manifestText = read("manifest.webmanifest");
+  const sw = read("sw.js");
+  const pwa = read("app/pwa.js");
+  const testsSource = fs.readFileSync(__filename, "utf8");
+
+  /* ===== الصياغة ===== */
+  [
+    ["app/app.js", app],
+    ["app/theme-init.js", themeInit],
+    ["sw.js", sw],
+    ["app/pwa.js", pwa],
+  ].forEach(([name, source]) => {
+    try {
+      new vm.Script(source, { filename: name });
+      pass(`${name}: syntax OK`);
+    } catch (error) {
+      fail(`${name}: syntax error -> ${error.message}`);
+    }
+  });
+
+  const openBraces = (css.match(/\{/g) || []).length;
+  const closeBraces = (css.match(/\}/g) || []).length;
+  if (openBraces === closeBraces) pass(`styles.css: ${openBraces} balanced rule blocks`);
+  else fail(`styles.css: ${openBraces} "{" but ${closeBraces} "}"`);
+
+  /* ===== بنية الملفات ===== */
+  if (/<style[\s>]/.test(html)) fail("index.html still contains an inline <style> block");
+  else pass("index.html has no inline style block");
+
+  if (/<script>[\s\S]*?<\/script>/.test(html)) fail("index.html still contains an inline script");
+  else pass("index.html has no inline script");
+
+  [
+    ['<link rel="stylesheet" href="app/styles.css">', "app/styles.css"],
+    ['<script src="app/config.js"></script>', "app/config.js"],
+    ['<script src="app/theme-init.js"></script>', "app/theme-init.js"],
+    ['<script src="app/pwa.js"></script>', "app/pwa.js"],
+    ['<script src="app/app.js"></script>', "app/app.js"],
+    ['<link rel="manifest" href="manifest.webmanifest">', "manifest.webmanifest"],
+    ['<link rel="apple-touch-icon" href="app/icons/apple-touch-icon.png">', "apple-touch-icon"],
+  ].forEach(([needle, name]) => {
+    if (html.includes(needle)) pass(`index.html links ${name}`);
+    else fail(`index.html does not link ${name}`);
+  });
+
+  if (html.indexOf("app/theme-init.js") < html.indexOf('href="app/styles.css"')) {
+    pass("theme-init.js loads before the stylesheet");
+  } else {
+    fail("theme-init.js should load before the stylesheet");
+  }
+
+  if (html.indexOf("app/config.js") < html.indexOf("app/theme-init.js")) {
+    pass("config.js loads before theme-init.js");
+  } else {
+    fail("config.js must load before theme-init.js");
+  }
+
+  if (/window\.DOUAA_CONFIG/.test(app) && /window\.DOUAA_CONFIG/.test(themeInit)) {
+    pass("app.js and theme-init.js share window.DOUAA_CONFIG");
+  } else {
+    fail("app.js and theme-init.js must read the shared config");
+  }
+
+  /* ===== الأيقونة ===== */
+  [
+    ['href="app/favicon.svg"', "favicon.svg"],
+    ['href="favicon.ico"', "favicon.ico"],
+  ].forEach(([needle, name]) => {
+    if (html.includes(needle)) pass(`index.html links ${name}`);
+    else fail(`index.html does not link ${name}`);
+  });
+
+  if (/viewBox="0 0 32 32"/.test(faviconSvg)) pass("favicon.svg has a 32px viewBox");
+  else fail("favicon.svg is missing the 32px viewBox");
+
+  if (/<title[\s>]/.test(faviconSvg)) pass("favicon.svg has a title");
+  else fail("favicon.svg is missing a title");
+
+  if (/<script|<image|href="http/i.test(faviconSvg)) {
+    fail("favicon.svg contains a script, raster image or external reference");
+  } else {
+    pass("favicon.svg is self-contained vector artwork");
+  }
+
+  const icoHeaderOk =
+    faviconIco.length > 6 &&
+    faviconIco[0] === 0 &&
+    faviconIco[1] === 0 &&
+    faviconIco[2] === 1 &&
+    faviconIco[3] === 0;
+  if (icoHeaderOk) pass("favicon.ico has a valid ICO header");
+  else fail("favicon.ico has an invalid ICO header");
+
+  const icoCount = icoHeaderOk ? faviconIco.readUInt16LE(4) : 0;
+  if (icoCount === 3) pass("favicon.ico contains 3 image sizes");
+  else fail(`favicon.ico contains ${icoCount} image sizes instead of 3`);
+
+  const icoSizes = Array.from({ length: icoCount }, (_, index) => faviconIco[6 + index * 16]);
+  if (icoSizes.join(",") === "16,32,48") pass("favicon.ico sizes are 16, 32 and 48");
+  else fail(`favicon.ico sizes are ${icoSizes.join(", ")}`);
+
+  /* ===== المعرّفات ===== */
+  const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
+  const idSet = new Set(ids);
+
+  const duplicates = ids.filter((id, index) => ids.indexOf(id) !== index);
+  if (duplicates.length === 0) pass(`index.html: ${ids.length} unique ids`);
+  else fail(`duplicate ids: ${[...new Set(duplicates)].join(", ")}`);
+
+  const missingUsed = [...app.matchAll(/getElementById\("([^"]+)"\)/g)]
+    .map((match) => match[1])
+    .filter((id) => !idSet.has(id));
+
+  if (missingUsed.length === 0) pass("all getElementById references exist");
+  else missingUsed.forEach((id) => fail(`missing id in index.html: ${id}`));
+
+  const missingSim = [...testsSource.matchAll(/register\("([^"]+)"/g)]
+    .map((match) => match[1])
+    .filter((id) => !idSet.has(id));
+
+  if (missingSim.length === 0) pass("every simulated element exists in index.html");
+  else missingSim.forEach((id) => fail(`tests/tests.js registers an unknown id: ${id}`));
+
+  /* ===== العمل بدون إنترنت: الخطوط ===== */
+  if (/fonts\.(?:googleapis|gstatic)\.com/.test(html + css)) {
+    fail("index.html or styles.css still requests Google Fonts");
+  } else {
+    pass("no external font request remains");
+  }
+
+  const fontFiles = [
+    ...new Set([...css.matchAll(/url\("(fonts\/[^"]+\.woff2)"\)/g)].map((match) => match[1])),
+  ];
+
+  if (fontFiles.length === 8) pass("styles.css declares 8 local woff2 files");
+  else fail(`styles.css declares ${fontFiles.length} local woff2 files instead of 8`);
+
+  const swapCount = (css.match(/font-display:\s*swap/g) || []).length;
+  if (swapCount === 8) pass("every local font uses font-display: swap");
+  else fail(`font-display: swap appears ${swapCount} times instead of 8`);
+
+  fontFiles.forEach((file) => {
+    const fullPath = path.join(ROOT, "app", file);
+    if (!fs.existsSync(fullPath)) {
+      fail(`missing font file: ${file}`);
+      return;
+    }
+    const magic = fs.readFileSync(fullPath).subarray(0, 4).toString("ascii");
+    if (magic === "wOF2") pass(`${file}: valid woff2 file`);
+    else fail(`${file}: invalid woff2 magic "${magic}"`);
+  });
+
+  ["fonts/LICENSE-AMIRI.txt", "fonts/LICENSE-IBM-PLEX.txt"].forEach((license) => {
+    if (fs.existsSync(path.join(ROOT, "app", license))) pass(`${license}: present`);
+    else fail(`missing font license: ${license}`);
+  });
+
+  /* ===== مانيفست التثبيت والأيقونات ===== */
+  const manifestIconPaths = [];
+
+  function readPngSize(filePath) {
+    if (!fs.existsSync(filePath)) return null;
+    const buffer = fs.readFileSync(filePath);
+    const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    if (buffer.length < 24 || !buffer.subarray(0, 8).equals(signature)) return null;
+    return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+  }
+
+  let manifest = null;
+  try {
+    manifest = JSON.parse(manifestText);
+    pass("manifest.webmanifest: valid JSON");
+  } catch (error) {
+    fail(`manifest.webmanifest: invalid JSON -> ${error.message}`);
+  }
+
+  if (manifest) {
+    ["name", "short_name", "start_url", "scope", "display", "lang", "dir"].forEach((field) => {
+      if (typeof manifest[field] === "string" && manifest[field]) pass(`manifest has ${field}`);
+      else fail(`manifest is missing ${field}`);
+    });
+
+    if (manifest.start_url === "./" && manifest.scope === "./") {
+      pass("manifest uses relative start_url and scope");
+    } else {
+      fail("manifest must use relative start_url and scope for GitHub Pages");
+    }
+
+    const icons = Array.isArray(manifest.icons) ? manifest.icons : [];
+    const iconSizes = [];
+
+    icons.forEach((icon) => {
+      if (typeof icon.src !== "string") {
+        fail("manifest contains an icon without src");
+        return;
+      }
+      manifestIconPaths.push(icon.src);
+      iconSizes.push(icon.sizes);
+
+      const size = readPngSize(path.join(ROOT, icon.src));
+      if (!size) {
+        fail(`manifest icon is missing or not a PNG: ${icon.src}`);
+      } else if (`${size.width}x${size.height}` !== icon.sizes) {
+        fail(`${icon.src}: ${size.width}x${size.height} does not match sizes ${icon.sizes}`);
+      } else {
+        pass(`${icon.src}: ${icon.sizes} PNG`);
+      }
+    });
+
+    if (iconSizes.includes("192x192") && iconSizes.includes("512x512")) {
+      pass("manifest has 192 and 512 icons");
+    } else {
+      fail("manifest needs 192x192 and 512x512 icons");
+    }
+
+    if (icons.some((icon) => String(icon.purpose).includes("maskable"))) {
+      pass("manifest has a maskable icon");
+    } else {
+      fail("manifest needs a maskable icon");
+    }
+  }
+
+  /* ===== Service Worker ===== */
+  const shellMatch = sw.match(/const SHELL_FILES = \[([\s\S]*?)\];/);
+  const shellFiles = shellMatch
+    ? [...shellMatch[1].matchAll(/"([^"]+)"/g)].map((match) => match[1])
+    : [];
+
+  if (shellFiles.length > 0) pass(`sw.js precaches ${shellFiles.length} files`);
+  else fail("sw.js has no SHELL_FILES list");
+
+  if (shellFiles.includes("./") && shellFiles.includes("index.html")) {
+    pass("sw.js caches the app start URL");
+  } else {
+    fail("sw.js must cache ./ and index.html");
+  }
+
+  const missingShell = shellFiles
+    .filter((file) => file !== "./")
+    .filter((file) => !fs.existsSync(path.join(ROOT, file)));
+  if (missingShell.length === 0) pass("every precached file exists on disk");
+  else missingShell.forEach((file) => fail(`sw.js precaches a missing file: ${file}`));
+
+  const requiredShell = [
+    "index.html",
+    "app/styles.css",
+    "app/config.js",
+    "app/theme-init.js",
+    "app/app.js",
+    "app/pwa.js",
+    "manifest.webmanifest",
+    "app/favicon.svg",
+    "favicon.ico",
+    ...fontFiles.map((file) => `app/${file}`),
+    ...manifestIconPaths,
+  ];
+  const notPrecached = requiredShell.filter((file) => !shellFiles.includes(file));
+  if (notPrecached.length === 0) pass("sw.js precaches every app asset");
+  else notPrecached.forEach((file) => fail(`sw.js does not precache: ${file}`));
+
+  if (/const CACHE_NAME = "douaa-tracker-shell-v\d+";/.test(sw)) {
+    pass("sw.js has a versioned cache name");
+  } else {
+    fail("sw.js cache name must be douaa-tracker-shell-v<number>");
+  }
+
+  /* ===== تسجيل التثبيت ===== */
+  ["install-app", "install-note"].forEach((id) => {
+    if (idSet.has(id)) pass(`index.html has #${id}`);
+    else fail(`index.html is missing #${id}`);
+  });
+
+  if (/const SW_URL = "sw.js";/.test(pwa) && /serviceWorker\.register\(SW_URL\)/.test(pwa)) {
+    pass("pwa.js registers sw.js");
+  } else {
+    fail("pwa.js does not register sw.js");
+  }
+
+  if (html.indexOf("app/pwa.js") < html.indexOf("app/app.js")) pass("pwa.js loads before app.js");
+  else fail("pwa.js must load before app.js");
+})();
+
+/* ===== 2) محاكاة DOM وسلوك التطبيق ===== */
+async function runSimulationTests() {
 const root = path.join(__dirname, "..");
-const config = fs.readFileSync(path.join(root, "config.js"), "utf8");
-const themeInit = fs.readFileSync(path.join(root, "theme-init.js"), "utf8");
-const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
+const config = fs.readFileSync(path.join(root, "app", "config.js"), "utf8");
+const themeInit = fs.readFileSync(path.join(root, "app", "theme-init.js"), "utf8");
+const app = fs.readFileSync(path.join(root, "app", "app.js"), "utf8");
 
 /* ===== DOM مصغّر للاختبار ===== */
 class ClassList {
@@ -452,18 +770,6 @@ vm.runInContext(themeInit, sandbox);
 vm.runInContext(app, sandbox);
 
 /* ===== أدوات الاختبار ===== */
-let passed = 0;
-let failed = 0;
-
-function check(label, condition, details = "") {
-  if (condition) {
-    passed += 1;
-    console.log(`PASS ${label}`);
-  } else {
-    failed += 1;
-    console.log(`FAIL ${label}${details ? " -> " + details : ""}`);
-  }
-}
 
 const list = byId.get("dhikr-list");
 const nextButton = byId.get("next-incomplete");
@@ -1323,11 +1629,440 @@ async function runAsyncTests() {
     document.documentElement.dataset.fontSize
   );
 
-  console.log(`\n${passed} passed, ${failed} failed`);
-  process.exit(failed ? 1 : 0);
 }
 
-runAsyncTests().catch((error) => {
+await runAsyncTests();
+}
+
+/* ===== 3) التثبيت PWA ===== */
+async function runPwaTests() {
+const source = fs.readFileSync(path.join(__dirname, "..", "app", "pwa.js"), "utf8");
+
+
+const flush = () => new Promise((resolve) => setImmediate(resolve));
+
+class FakeElement {
+  constructor(id) {
+    this.id = id;
+    this.hidden = true;
+    this.textContent = "";
+    this.listeners = {};
+  }
+  addEventListener(type, handler) {
+    if (!this.listeners[type]) this.listeners[type] = [];
+    this.listeners[type].push(handler);
+  }
+  click() {
+    (this.listeners.click || []).forEach((handler) => handler({}));
+  }
+}
+
+function createEnvironment(options = {}) {
+  const {
+    protocol = "https:",
+    hostname = "jabar-reda.github.io",
+    userAgent = "Mozilla/5.0 Chrome/126",
+    standalone = false,
+    hasServiceWorker = true,
+    maxTouchPoints = 0,
+  } = options;
+
+  const registrations = [];
+  const installPrompts = [];
+  const elements = {
+    "install-app": new FakeElement("install-app"),
+    "install-note": new FakeElement("install-note"),
+  };
+  const windowListeners = {};
+
+  const navigatorObject = {
+    userAgent,
+    standalone,
+    maxTouchPoints,
+  };
+
+  if (hasServiceWorker) {
+    navigatorObject.serviceWorker = {
+      register(url) {
+        registrations.push(url);
+        return Promise.resolve();
+      },
+    };
+  }
+
+  const windowObject = {
+    navigator: navigatorObject,
+    matchMedia: (query) => ({ matches: standalone && query.includes("display-mode") }),
+    addEventListener(type, handler) {
+      if (!windowListeners[type]) windowListeners[type] = [];
+      windowListeners[type].push(handler);
+    },
+  };
+
+  const documentObject = {
+    getElementById: (id) => elements[id] || null,
+  };
+
+  vm.runInNewContext(
+    source,
+    {
+      window: windowObject,
+      navigator: navigatorObject,
+      document: documentObject,
+      location: { protocol, hostname },
+      console,
+    },
+    { filename: "pwa.js" }
+  );
+
+  return {
+    elements,
+    registrations,
+    installPrompts,
+    dispatch(type, event = {}) {
+      (windowListeners[type] || []).forEach((handler) => handler(event));
+    },
+    makeInstallEvent(outcome) {
+      const event = {
+        preventDefault() {
+          event.prevented = true;
+        },
+        prompt() {
+          event.prompted = true;
+        },
+        userChoice: Promise.resolve({ outcome }),
+      };
+      return event;
+    },
+  };
+}
+
+async function main() {
+  /* ===== التسجيل ===== */
+  const httpsEnvironment = createEnvironment();
+  check("https: registration waits for the load event", httpsEnvironment.registrations.length === 0);
+  httpsEnvironment.dispatch("load");
+  await flush();
+  check("https: registers sw.js", httpsEnvironment.registrations[0] === "sw.js");
+
+  const localEnvironment = createEnvironment({ protocol: "http:", hostname: "localhost" });
+  localEnvironment.dispatch("load");
+  await flush();
+  check("localhost registers sw.js", localEnvironment.registrations[0] === "sw.js");
+
+  const fileEnvironment = createEnvironment({ protocol: "file:", hostname: "" });
+  fileEnvironment.dispatch("load");
+  await flush();
+  check("file:// does not register a service worker", fileEnvironment.registrations.length === 0);
+  check(
+    "file:// explains that installation needs hosting",
+    fileEnvironment.elements["install-note"].textContent.includes("GitHub Pages")
+  );
+
+  const unsupportedEnvironment = createEnvironment({ hasServiceWorker: false });
+  unsupportedEnvironment.dispatch("load");
+  await flush();
+  check("browser without service worker does not register", unsupportedEnvironment.registrations.length === 0);
+  check(
+    "browser without service worker gets a clear note",
+    unsupportedEnvironment.elements["install-note"].textContent.includes("لا يدعم")
+  );
+
+  /* ===== زر التثبيت ===== */
+  const installEnvironment = createEnvironment();
+  const acceptedEvent = installEnvironment.makeInstallEvent("accepted");
+  installEnvironment.dispatch("beforeinstallprompt", acceptedEvent);
+  check("beforeinstallprompt is intercepted", acceptedEvent.prevented === true);
+  check("install button is revealed", installEnvironment.elements["install-app"].hidden === false);
+
+  installEnvironment.elements["install-app"].click();
+  check("clicking the button opens the install prompt", acceptedEvent.prompted === true);
+  await flush();
+  check("install button hides after accepting", installEnvironment.elements["install-app"].hidden === true);
+  check(
+    "note confirms the installation",
+    installEnvironment.elements["install-note"].textContent.includes("تم تثبيت")
+  );
+
+  const dismissedEnvironment = createEnvironment();
+  const dismissedEvent = dismissedEnvironment.makeInstallEvent("dismissed");
+  dismissedEnvironment.dispatch("beforeinstallprompt", dismissedEvent);
+  dismissedEnvironment.elements["install-app"].click();
+  await flush();
+  check(
+    "dismissed installation shows a retry note",
+    dismissedEnvironment.elements["install-note"].textContent.includes("لم يكتمل")
+  );
+
+  const installedEnvironment = createEnvironment();
+  installedEnvironment.dispatch("beforeinstallprompt", installedEnvironment.makeInstallEvent("accepted"));
+  installedEnvironment.dispatch("appinstalled");
+  check("appinstalled hides the button", installedEnvironment.elements["install-app"].hidden === true);
+  check(
+    "appinstalled confirms the install",
+    installedEnvironment.elements["install-note"].textContent.includes("مثبَّت")
+  );
+
+  /* ===== الحالات الخاصة ===== */
+  const iosEnvironment = createEnvironment({
+    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
+  });
+  check("iOS keeps the install button hidden", iosEnvironment.elements["install-app"].hidden === true);
+  check(
+    "iOS shows home-screen instructions",
+    iosEnvironment.elements["install-note"].textContent.includes("إضافة إلى الشاشة الرئيسية")
+  );
+
+  const ipadEnvironment = createEnvironment({
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+    maxTouchPoints: 5,
+  });
+  check(
+    "iPadOS is treated as iOS",
+    ipadEnvironment.elements["install-note"].textContent.includes("إضافة إلى الشاشة الرئيسية")
+  );
+
+  const macEnvironment = createEnvironment({
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+  });
+  check(
+    "a real Mac is not treated as iOS",
+    !macEnvironment.elements["install-note"].textContent.includes("إضافة إلى الشاشة الرئيسية")
+  );
+
+  const standaloneEnvironment = createEnvironment({ standalone: true });
+  check("installed app keeps the button hidden", standaloneEnvironment.elements["install-app"].hidden === true);
+  check(
+    "installed app explains it already runs offline",
+    standaloneEnvironment.elements["install-note"].textContent.includes("بدون إنترنت")
+  );
+
+}
+
+await main();
+}
+
+/* ===== 4) Service Worker ===== */
+async function runServiceWorkerTests() {
+const source = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
+const ORIGIN = "https://example.com";
+
+// نقرأ اسم الكاش وقائمة الملفات من المصدر حتى لا تتعطل الاختبارات عند رفع النسخة.
+const cacheMatch = source.match(/const CACHE_NAME = "(douaa-tracker-shell-v(\d+))";/);
+const CACHE_NAME = cacheMatch ? cacheMatch[1] : "douaa-tracker-shell-v1";
+const OLD_CACHE_NAME = cacheMatch
+  ? `douaa-tracker-shell-v${Math.max(0, Number(cacheMatch[2]) - 1)}`
+  : "douaa-tracker-shell-v0";
+
+const shellMatch = source.match(/const SHELL_FILES = \[([\s\S]*?)\];/);
+const SHELL_COUNT = shellMatch ? [...shellMatch[1].matchAll(/"([^"]+)"/g)].length : 0;
+
+
+const flush = () => new Promise((resolve) => setImmediate(resolve));
+const absolute = (file) => new URL(file, `${ORIGIN}/douaa-tracker/`).href;
+
+function fakeResponse() {
+  return { ok: true, clone: () => fakeResponse() };
+}
+
+function createEnvironment() {
+  const listeners = {};
+  const cacheStore = new Map();
+  const cacheNames = [CACHE_NAME, OLD_CACHE_NAME];
+  const deletedCaches = [];
+  let fetchCount = 0;
+  let skipsWaiting = false;
+  let claimsClients = false;
+  let offline = false;
+
+  const fakeCache = {
+    addAll(files) {
+      files.forEach((file) => cacheStore.set(absolute(file), fakeResponse()));
+      return Promise.resolve();
+    },
+    put(request, response) {
+      cacheStore.set(typeof request === "string" ? absolute(request) : request.url, response);
+      return Promise.resolve();
+    },
+  };
+
+  const caches = {
+    open: () => Promise.resolve(fakeCache),
+    keys: () => Promise.resolve(cacheNames.slice()),
+    delete(name) {
+      deletedCaches.push(name);
+      return Promise.resolve(true);
+    },
+    match(request) {
+      const key = typeof request === "string" ? absolute(request) : request.url;
+      return Promise.resolve(cacheStore.get(key));
+    },
+  };
+
+  const fetch = (request) => {
+    fetchCount += 1;
+    if (offline) return Promise.reject(new Error("offline"));
+    return Promise.resolve(fakeResponse());
+  };
+
+  const self = {
+    location: { origin: ORIGIN },
+    addEventListener(type, handler) {
+      listeners[type] = handler;
+    },
+    skipWaiting() {
+      skipsWaiting = true;
+      return Promise.resolve();
+    },
+    clients: {
+      claim() {
+        claimsClients = true;
+        return Promise.resolve();
+      },
+    },
+  };
+
+  vm.runInNewContext(source, {
+    self,
+    caches,
+    fetch,
+    URL,
+    Response: { error: () => ({ ok: false, isError: true }) },
+  });
+
+  async function runLifecycle(type) {
+    const waits = [];
+    listeners[type]({ waitUntil: (promise) => waits.push(promise) });
+    await Promise.all(waits);
+  }
+
+  async function request(request) {
+    let responded = null;
+    listeners.fetch({ request, respondWith: (promise) => (responded = promise) });
+    if (!responded) return null;
+    return responded;
+  }
+
+  return {
+    runLifecycle,
+    request,
+    cacheStore,
+    deletedCaches,
+    getFetchCount: () => fetchCount,
+    didSkipWaiting: () => skipsWaiting,
+    didClaimClients: () => claimsClients,
+    setOffline: (value) => {
+      offline = value;
+    },
+    seed(file) {
+      cacheStore.set(absolute(file), fakeResponse());
+    },
+  };
+}
+
+function navigationRequest() {
+  return { method: "GET", mode: "navigate", url: absolute("index.html") };
+}
+
+function fontRequest() {
+  return { method: "GET", mode: "no-cors", url: absolute("app/fonts/amiri-400-arabic.woff2") };
+}
+
+async function main() {
+  const environment = createEnvironment();
+  await environment.runLifecycle("install");
+  check("install caches the whole shell", environment.cacheStore.size === SHELL_COUNT);
+  check("install activates the new worker immediately", environment.didSkipWaiting() === true);
+
+  await environment.runLifecycle("activate");
+  check("activate deletes old caches", environment.deletedCaches.includes(OLD_CACHE_NAME));
+  check("activate keeps the current cache", !environment.deletedCaches.includes(CACHE_NAME));
+  check("activate takes control of open pages", environment.didClaimClients() === true);
+
+  /* ===== ملفات التطبيق: الشبكة أولاً ===== */
+  const onlineEnvironment = createEnvironment();
+  await onlineEnvironment.runLifecycle("install");
+  await onlineEnvironment.request(navigationRequest());
+  await flush();
+  check("online navigation uses the network", onlineEnvironment.getFetchCount() === 1);
+  check(
+    "online navigation refreshes the cached page",
+    onlineEnvironment.cacheStore.has(absolute("index.html"))
+  );
+
+  const offlineNavigation = createEnvironment();
+  await offlineNavigation.runLifecycle("install");
+  offlineNavigation.setOffline(true);
+  const fallback = await offlineNavigation.request(navigationRequest());
+  check("offline navigation returns the cached page", Boolean(fallback) && fallback.ok === true);
+
+  const offlineWithoutCache = createEnvironment();
+  await offlineWithoutCache.runLifecycle("install");
+  offlineWithoutCache.setOffline(true);
+  const missingPage = await offlineWithoutCache.request({
+    method: "GET",
+    mode: "navigate",
+    url: absolute("unknown-page.html"),
+  });
+  check("offline navigation falls back to index.html", Boolean(missingPage) && missingPage.ok === true);
+
+  /* ===== الخطوط والأيقونات: الكاش أولاً ===== */
+  const cachedFontEnvironment = createEnvironment();
+  await cachedFontEnvironment.runLifecycle("install");
+  cachedFontEnvironment.setOffline(true);
+  const cachedFont = await cachedFontEnvironment.request(fontRequest());
+  check("cached font is served offline", Boolean(cachedFont) && cachedFont.ok === true);
+  check("cached font needs no network", cachedFontEnvironment.getFetchCount() === 0);
+
+  const newFontEnvironment = createEnvironment();
+  await newFontEnvironment.runLifecycle("install");
+  const newFontFile = "app/fonts/amiri-700-latin.woff2";
+  const newFont = await newFontEnvironment.request({
+    method: "GET",
+    mode: "no-cors",
+    url: absolute(newFontFile),
+  });
+  await flush();
+  check("uncached font is fetched", Boolean(newFont) && newFontEnvironment.getFetchCount() === 1);
+  check(
+    "fetched font is stored for offline use",
+    newFontEnvironment.cacheStore.has(absolute(newFontFile))
+  );
+
+  /* ===== الطلبات المستثناة ===== */
+  const ignoredEnvironment = createEnvironment();
+  const ignoredPost = await ignoredEnvironment.request({
+    method: "POST",
+    mode: "no-cors",
+    url: absolute("app.js"),
+  });
+  check("non-GET requests are ignored", ignoredPost === null);
+
+  const crossOrigin = await ignoredEnvironment.request({
+    method: "GET",
+    mode: "no-cors",
+    url: "https://fonts.example.com/font.woff2",
+  });
+  check("cross-origin requests are ignored", crossOrigin === null);
+
+}
+
+await main();
+}
+
+/* ===== التشغيل ===== */
+async function runAllTests() {
+  await runSimulationTests();
+  await runPwaTests();
+  await runServiceWorkerTests();
+
+  console.log(`\n${passed} passed, ${failed} failed`);
+  if (failed > 0) process.exit(1);
+}
+
+runAllTests().catch((error) => {
   console.error(error);
   process.exit(1);
 });

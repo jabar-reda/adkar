@@ -147,13 +147,13 @@ function encodePng(size, pixels) {
 }
 
 function main() {
-  const outputDirectory = path.join(__dirname, "..", "icons");
+  const outputDirectory = path.join(__dirname, "..", "app", "icons");
   fs.mkdirSync(outputDirectory, { recursive: true });
 
   ICONS.forEach(({ fileName, size, rounded }) => {
     const png = encodePng(size, renderIcon(size, rounded));
     fs.writeFileSync(path.join(outputDirectory, fileName), png);
-    console.log(`icons/${fileName} — ${size}x${size}، ${png.length} بايت`);
+    console.log(`app/icons/${fileName} — ${size}x${size}، ${png.length} بايت`);
   });
 }
 

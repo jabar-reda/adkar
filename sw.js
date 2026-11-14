@@ -1,30 +1,30 @@
 // Service Worker: يخزّن ملفات التطبيق ليعمل بدون إنترنت بعد أول زيارة.
 // ارفع CACHE_NAME عند تغيير قائمة SHELL_FILES حتى يُستبدل الكاش القديم.
-const CACHE_NAME = "douaa-tracker-shell-v2";
+const CACHE_NAME = "douaa-tracker-shell-v3";
 
 const SHELL_FILES = [
   "./",
   "index.html",
-  "styles.css",
-  "config.js",
-  "theme-init.js",
-  "app.js",
-  "pwa.js",
+  "app/styles.css",
+  "app/config.js",
+  "app/theme-init.js",
+  "app/app.js",
+  "app/pwa.js",
   "manifest.webmanifest",
-  "favicon.svg",
+  "app/favicon.svg",
   "favicon.ico",
-  "icons/icon-192.png",
-  "icons/icon-512.png",
-  "icons/icon-maskable-512.png",
-  "icons/apple-touch-icon.png",
-  "fonts/amiri-400-arabic.woff2",
-  "fonts/amiri-700-arabic.woff2",
-  "fonts/ibm-plex-400-arabic.woff2",
-  "fonts/ibm-plex-400-latin.woff2",
-  "fonts/ibm-plex-500-arabic.woff2",
-  "fonts/ibm-plex-500-latin.woff2",
-  "fonts/ibm-plex-600-arabic.woff2",
-  "fonts/ibm-plex-600-latin.woff2",
+  "app/icons/icon-192.png",
+  "app/icons/icon-512.png",
+  "app/icons/icon-maskable-512.png",
+  "app/icons/apple-touch-icon.png",
+  "app/fonts/amiri-400-arabic.woff2",
+  "app/fonts/amiri-700-arabic.woff2",
+  "app/fonts/ibm-plex-400-arabic.woff2",
+  "app/fonts/ibm-plex-400-latin.woff2",
+  "app/fonts/ibm-plex-500-arabic.woff2",
+  "app/fonts/ibm-plex-500-latin.woff2",
+  "app/fonts/ibm-plex-600-arabic.woff2",
+  "app/fonts/ibm-plex-600-latin.woff2",
 ];
 
 self.addEventListener("install", (event) => {

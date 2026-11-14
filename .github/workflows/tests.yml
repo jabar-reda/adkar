@@ -15,4 +15,4 @@ jobs:
         with:
           node-version: 20
       - name: Run tests
-        run: node tests/run.js
+        run: node tests/tests.js

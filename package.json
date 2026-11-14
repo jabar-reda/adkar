@@ -4,6 +4,6 @@
   "private": true,
   "description": "متابعة يومية لأذكار الصباح والمساء، بدون خادم أو مكتبات خارجية.",
   "scripts": {
-    "test": "node tests/run.js"
+    "test": "node tests/tests.js"
   }
 }
