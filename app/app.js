@@ -2232,9 +2232,13 @@
   // حدث storage يصل إلى كل التبويبات عدا الذي كتب؛ نعيد القراءة
   // من الصفر بدل محاولة الدمج، فالمصدر الأحدث هو التخزين نفسه.
   function reloadStateFromStorage(nextState) {
-    storageBlocked = false;
-    storageLoadIssue = null;
-    state = nextState || loadState();
+    if (nextState) state = nextState;
+    else {
+      storageBlocked = false;
+      storageLoadIssue = null;
+      state = loadState();
+    }
+    if (storageBlocked) reportStorageState(false);
     renderedDay = dayKey();
     selectedCalendarKey = renderedDay;
     calendarMonth = startOfMonth(new Date());
@@ -2260,6 +2264,12 @@
       storageBlocked = false;
       storageLoadIssue = null;
       const remoteState = loadState();
+      if (storageBlocked) {
+        reportStorageState(false);
+        reloadStateFromStorage(state);
+        announce("تعذّرت مزامنة البيانات لأن التخزين الخارجي تالف");
+        return;
+      }
       const mergedState = mergeConcurrentState(baseState, state, remoteState);
       const remoteSnapshot = JSON.stringify(remoteState);
       state = mergedState;
