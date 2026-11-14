@@ -660,6 +660,7 @@ const stableItemKey = (period, title) => {
 const itemKeys = {
   morning0: stableItemKey("morning", "آية الكرسي"),
   morning1: stableItemKey("morning", "سورة الإخلاص"),
+  morning2: stableItemKey("morning", "سورة الفلق"),
   evening0: stableItemKey("evening", "آية الكرسي"),
   wake0: stableItemKey("wake", "الحمد لله الذي أحيانا بعد ما أماتنا"),
   sleep0: stableItemKey("sleep", "آخر آيتين من سورة البقرة"),
@@ -1512,6 +1513,22 @@ async function runAsyncTests() {
     "a storage event applies settings from another tab",
     document.documentElement.dataset.fontSize === "large",
     document.documentElement.dataset.fontSize
+  );
+
+  /* دمج تعديلات مستقلة من تبويبين */
+  const baseProgress = storage.get("adkar.v1");
+  pill(1).click();
+  const remoteProgress = JSON.parse(baseProgress);
+  remoteProgress.days["2026-10-31"] = remoteProgress.days["2026-10-31"] || { morning: {}, evening: {}, wake: {}, sleep: {} };
+  remoteProgress.days["2026-10-31"].morning = remoteProgress.days["2026-10-31"].morning || {};
+  remoteProgress.days["2026-10-31"].morning["morning-2"] = { count: 1, done: false };
+  storage.set("adkar.v1", JSON.stringify(remoteProgress));
+  dispatchWindowEvent("storage", { key: "adkar.v1", oldValue: baseProgress });
+  check(
+    "concurrent edits to different dhikr entries are merged",
+    state().days["2026-10-31"].morning[itemKeys.morning1].count === 1 &&
+      state().days["2026-10-31"].morning[itemKeys.morning2].count === 1,
+    JSON.stringify(state().days["2026-10-31"].morning)
   );
 
   /* حماية التخزين التالف */
