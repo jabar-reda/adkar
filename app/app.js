@@ -405,8 +405,18 @@
   const dayKey = (date = new Date()) =>
     `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 
-  // مفتاح فريد لكل ذكر داخل قسمه: "morning-0" مثلاً، وهو نفسه مفتاح التخزين.
-  const itemKey = (period, index) => `${period}-${index}`;
+  // هوية الذكر مشتقة من عنوانه لا موضعه، فتظل ثابتة عند إعادة ترتيب القائمة.
+  function stableItemId(item) {
+    const source = String(item.id || item.title || "untitled").normalize("NFKC").trim();
+    let hash = 2166136261;
+    for (let index = 0; index < source.length; index += 1) {
+      hash ^= source.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(36);
+  }
+  const itemKey = (period, item) => period + "-" + stableItemId(item);
+  const legacyItemKey = (period, index) => period + "-" + index;
 
   // بنية يوم فارغ لكل الأقسام الأربعة، تُستخدم كأساس آمن للقراءة والكتابة.
   const emptyDay = () => ({ morning: {}, evening: {}, wake: {}, sleep: {} });
@@ -450,14 +460,16 @@
       const record = source[period];
       if (!record || typeof record !== "object" || Array.isArray(record)) return;
       SECTIONS[period].items.forEach((item, index) => {
-        const entry = record[itemKey(period, index)];
+        const key = itemKey(period, item);
+        // نقرأ المفتاح القديم أثناء الترحيل فقط، ثم نحفظ الهوية الجديدة.
+        const entry = record[key] || record[legacyItemKey(period, index)];
         if (!entry || typeof entry !== "object" || Array.isArray(entry)) return;
         if (item.count === 0) {
-          day[period][itemKey(period, index)] = { count: 0, done: Boolean(entry.done) };
+          day[period][key] = { count: 0, done: Boolean(entry.done) };
           return;
         }
         const count = Math.max(0, Math.min(item.count, Math.floor(Number(entry.count) || 0)));
-        day[period][itemKey(period, index)] = { count, done: count >= item.count };
+        day[period][key] = { count, done: count >= item.count };
       });
     });
     return day;
@@ -567,7 +579,7 @@
     const record = getDay(key)[period];
     return SECTIONS[period].items.reduce(
       (total, item, index) =>
-        isItemComplete(item, record[itemKey(period, index)]) ? total + 1 : total,
+        isItemComplete(item, record[itemKey(period, item)]) ? total + 1 : total,
       0
     );
   }
@@ -832,7 +844,7 @@
      يعدّلان الحالة ويسجلان إجراءً قابلاً للتراجع. تُجمع المؤشرات في
      itemControllers لتبقى مفاتيح التراجع والعدّاد تعمل بعد أي إعادة رسم. */
   function createItem(period, item, index) {
-    const key = itemKey(period, index);
+    const key = itemKey(period, item);
     const saved = getEntry(period, key);
     const progress = {
       count: Number(saved && saved.count) || 0,
@@ -1550,7 +1562,7 @@
     const section = SECTIONS[activePeriod];
     const record = getDay(dayKey())[activePeriod];
     const index = section.items.findIndex(
-      (item, itemIndex) => !isItemComplete(item, record[itemKey(activePeriod, itemIndex)])
+      (item, itemIndex) => !isItemComplete(item, record[itemKey(activePeriod, item)])
     );
     if (index === -1) return;
 
@@ -1867,7 +1879,7 @@
       const importedRecord = importedDay[period] || {};
 
       SECTIONS[period].items.forEach((item, index) => {
-        const key = itemKey(period, index);
+        const key = itemKey(period, item);
         const entry = mergeItemEntry(item, currentRecord[key], importedRecord[key]);
         if (entry) merged[period][key] = entry;
       });
