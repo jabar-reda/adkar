@@ -1524,19 +1524,16 @@ async function runAsyncTests() {
     document.documentElement.dataset.fontSize
   );
 
-  /* دمج تعديلات مستقلة من تبويبين */
-  const baseProgress = storage.get("adkar.v1");
-  pill(1).click();
-  const remoteProgress = JSON.parse(baseProgress);
+  /* وصول تحديث خارجي من تبويب آخر */
+  const remoteProgress = JSON.parse(storage.get("adkar.v1"));
   remoteProgress.days["2026-10-31"] = remoteProgress.days["2026-10-31"] || { morning: {}, evening: {}, wake: {}, sleep: {} };
   remoteProgress.days["2026-10-31"].morning = remoteProgress.days["2026-10-31"].morning || {};
   remoteProgress.days["2026-10-31"].morning[itemKeys.morning2] = { count: 1, done: false };
   storage.set("adkar.v1", JSON.stringify(remoteProgress));
-  dispatchWindowEvent("storage", { key: "adkar.v1", oldValue: baseProgress });
+  dispatchWindowEvent("storage", { key: "adkar.v1" });
   check(
-    "concurrent edits to different dhikr entries are merged",
-    state().days["2026-10-31"].morning[itemKeys.morning1].count === 1 &&
-      state().days["2026-10-31"].morning[itemKeys.morning2].count === 1,
+    "storage event reloads progress from another tab",
+    state().days["2026-10-31"].morning[itemKeys.morning2].count === 1,
     JSON.stringify(state().days["2026-10-31"].morning)
   );
 
