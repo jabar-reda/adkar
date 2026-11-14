@@ -648,6 +648,22 @@ const undoText = byId.get("undo-text");
 const undoButton = byId.get("undo-button");
 const settings = () => JSON.parse(storage.get("adkar.settings.v1") || "{}");
 const state = () => JSON.parse(storage.get("adkar.v1") || '{"days":{}}');
+const stableItemKey = (period, title) => {
+  const source = String(title).normalize("NFKC").trim();
+  let hash = 2166136261;
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return period + "-" + (hash >>> 0).toString(36);
+};
+const itemKeys = {
+  morning0: stableItemKey("morning", "آية الكرسي"),
+  morning1: stableItemKey("morning", "سورة الإخلاص"),
+  evening0: stableItemKey("evening", "آية الكرسي"),
+  wake0: stableItemKey("wake", "الحمد لله الذي أحيانا بعد ما أماتنا"),
+  sleep0: stableItemKey("sleep", "آخر آيتين من سورة البقرة"),
+};
 
 const pill = (index) => list.children[index].querySelector(".pill");
 const resetItem = (index) => list.children[index].querySelector(".undo");
@@ -1084,12 +1100,12 @@ async function runAsyncTests() {
   );
   check(
     "merge never lowers an existing count",
-    state().days["2026-10-31"].morning["morning-0"].count === 1,
-    JSON.stringify(state().days["2026-10-31"].morning["morning-0"])
+    state().days["2026-10-31"].morning[itemKeys.morning0].count === 1,
+    JSON.stringify(state().days["2026-10-31"].morning[itemKeys.morning0])
   );
   check(
     "merge adds the imported evening progress",
-    state().days["2026-10-31"].evening["evening-0"].count === 1,
+    state().days["2026-10-31"].evening[itemKeys.evening0].count === 1,
     JSON.stringify(state().days["2026-10-31"].evening)
   );
   check(
@@ -1100,8 +1116,8 @@ async function runAsyncTests() {
   check(
     "merge combines both records on an existing day",
     Boolean(
-      state().days["2026-10-30"].morning["morning-0"] &&
-        state().days["2026-10-30"].morning["morning-1"]
+      state().days["2026-10-30"].morning[itemKeys.morning0] &&
+        state().days["2026-10-30"].morning[itemKeys.morning1]
     ),
     JSON.stringify(state().days["2026-10-30"].morning)
   );
@@ -1313,7 +1329,7 @@ async function runAsyncTests() {
     Boolean(
       state().days["2026-10-31"] &&
         state().days["2026-10-31"].wake &&
-        state().days["2026-10-31"].wake["wake-0"]
+        state().days["2026-10-31"].wake[itemKeys.wake0]
     )
   );
   check(
@@ -1421,7 +1437,7 @@ async function runAsyncTests() {
     Boolean(
       state().days["2026-10-31"] &&
         state().days["2026-10-31"].sleep &&
-        state().days["2026-10-31"].sleep["sleep-0"]
+        state().days["2026-10-31"].sleep[itemKeys.sleep0]
     )
   );
   check(
