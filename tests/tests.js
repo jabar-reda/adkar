@@ -12,18 +12,18 @@ const DHIKR_SHARED_SOURCE = APP_SOURCE.slice(
   APP_SOURCE.indexOf("/* ===== أذكار الصباح")
 );
 const SHARED_DHIKR_IDS = new Map(
-  [...DHIKR_SHARED_SOURCE.matchAll(/^\\s{4}(\\w+): {\\s*\\n\\s{6}id: "([^"]+)"/gm)]
+  [...DHIKR_SHARED_SOURCE.matchAll(/^\s{4}(\w+): {\s*\n\s{6}id: "([^"]+)"/gm)]
     .map((match) => [match[1], match[2]])
 );
 const DHIKR_COUNTS = new Map(
-  [...APP_SOURCE.matchAll(/id: "([^"]+)",\\s*\\n\\s*title: "[^"]+",\\s*\\n\\s*count: (\\d+)/g)]
+  [...APP_SOURCE.matchAll(/id: "([^"]+)",\s*\n\s*title: "[^"]+",\s*\n\s*count: (\d+)/g)]
     .map((match) => [match[1], Number(match[2])])
 );
 function getSectionItemIds(name, endMarker) {
   const start = APP_SOURCE.indexOf("const " + name + " = [");
   const end = APP_SOURCE.indexOf(endMarker, start);
   const block = APP_SOURCE.slice(start, end);
-  return [...block.matchAll(/DHIKR\\.(\\w+)|id: "([^"]+)"/g)]
+  return [...block.matchAll(/DHIKR\.(\w+)|id: "([^"]+)"/g)]
     .map((match) => match[1] ? SHARED_DHIKR_IDS.get(match[1]) : match[2]);
 }
 const MORNING_ITEM_IDS = getSectionItemIds("MORNING_ITEMS", "/* ===== أذكار الاستيقاظ");
