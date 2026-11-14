@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>اختبار مزامنة التبويبات — Adkar</title>
+  <style>
+    body { font: 16px system-ui, sans-serif; margin: 24px; line-height: 1.7; }
+    .frames { display: grid; grid-template-columns: repeat(2, minmax(320px, 1fr)); gap: 16px; }
+    iframe { width: 100%; height: 560px; border: 1px solid #999; border-radius: 8px; }
+    #result { padding: 12px; border: 1px solid #999; border-radius: 8px; }
+    @media (max-width: 760px) { .frames { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <h1>اختبار التزامن بين سياقين مستقلين</h1>
+  <p>تفتح الصفحة التطبيق في إطارين مستقلين من المصدر نفسه، ثم تسجل ذكراً مختلفاً في كل إطار في وقت متقارب. يتطلب الاختبار متصفحاً يدعم Web Locks.</p>
+  <p id="result" role="status">جارٍ تجهيز السياقين…</p>
+  <div class="frames">
+    <iframe title="السياق الأول"></iframe>
+    <iframe title="السياق الثاني"></iframe>
+  </div>
+  <script>
+    (async function () {
+      const output = document.getElementById("result");
+      if (!navigator.locks || typeof navigator.locks.request !== "function") {
+        output.textContent = "غير مدعوم: هذا المتصفح لا يوفر Web Locks، لذلك لا يمكن تنفيذ اختبار التزامن.";
+        return;
+      }
+
+      // صفحة الاختبار مخصصة للتشغيل اليدوي؛ امسح بيانات التقدم قبل فتح الإطارين.
+      localStorage.removeItem("adkar.v1");
+      const frames = [...document.querySelectorAll("iframe")];
+      const loaded = frames.map((frame) => new Promise((resolve, reject) => {
+        frame.addEventListener("load", resolve, { once: true });
+        frame.addEventListener("error", reject, { once: true });
+        frame.src = "../index.html";
+      }));
+
+      try {
+        await Promise.all(loaded);
+        const first = frames[0].contentDocument.querySelectorAll("#dhikr-list .pill")[0];
+        const second = frames[1].contentDocument.querySelectorAll("#dhikr-list .pill")[1];
+        if (!first || !second) throw new Error("لم يتم العثور على أزرار الأذكار في الإطارين.");
+
+        // عمليتا الكتابة تصدران من نسختين منفصلتين من التطبيق.
+        first.click();
+        second.click();
+
+        const today = (() => {
+          const d = new Date();
+          return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-");
+        })();
+        const expected = ["morning-ayat-al-kursi", "morning-surah-al-ikhlas"];
+        const deadline = Date.now() + 5000;
+        while (Date.now() < deadline) {
+          const raw = localStorage.getItem("adkar.v1");
+          const saved = raw ? JSON.parse(raw) : null;
+          const record = saved && saved.days && saved.days[today] && saved.days[today].morning;
+          if (record && expected.every((key) => record[key] && record[key].count === 1)) {
+            output.textContent = "نجاح: احتُفظ بالتحديثين المستقلين من السياقين في التخزين المشترك.";
+            output.dataset.result = "passed";
+            return;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        throw new Error("فشل: لم يظهر التحديثان معاً في التخزين خلال 5 ثوانٍ.");
+      } catch (error) {
+        output.textContent = error.message;
+        output.dataset.result = "failed";
+      }
+    })();
+  </script>
+</body>
+</html>
