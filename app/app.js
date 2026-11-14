@@ -1712,6 +1712,9 @@
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
       return { ok: false, reason: "بنية الملف غير صالحة." };
     }
+    if (Number(raw.schemaVersion || raw.version || 1) > STATE_SCHEMA_VERSION) {
+      return { ok: false, reason: "هذه النسخة الاحتياطية أحدث من إصدار التطبيق الحالي." };
+    }
     if (!raw.days || typeof raw.days !== "object" || Array.isArray(raw.days)) {
       return { ok: false, reason: "الملف لا يحتوي بيانات أذكار." };
     }
@@ -1932,6 +1935,9 @@
     if (!pendingImport) return;
 
     const imported = pendingImport;
+    // الاستيراد الصريح من المستخدم هو مسار الاسترداد عند فساد التخزين.
+    storageBlocked = false;
+    storageLoadIssue = null;
     state = { schemaVersion: STATE_SCHEMA_VERSION, days: imported.days, stats: imported.stats };
     pruneDays();
     saveState();
@@ -1958,6 +1964,9 @@
     const imported = pendingImport;
     const addedDays = Object.keys(imported.days).filter((key) => !state.days[key]).length;
 
+    // الدمج الصريح يسمح بالاسترداد من نسخة سليمة إذا كان التخزين السابق تالفاً.
+    storageBlocked = false;
+    storageLoadIssue = null;
     state = { schemaVersion: STATE_SCHEMA_VERSION, days: mergeDays(state.days, imported.days), stats: { bestStreak: Math.max(sanitizeStats(state.stats).bestStreak, imported.stats.bestStreak) } };
     pruneDays();
     saveState();
@@ -2207,6 +2216,7 @@
   /* ===== بدء التشغيل ===== */
   // بترتيب معتمد: مزامنة أزرار الإعدادات مع ما قرأنا، فحجم الخط،
   // فالتاريخ، فتذكير النسخة، ثم رسم القسم الذي يناسب الساعة الآن.
+  if (storageBlocked) reportStorageState(false);
   syncSettingsUI();
   applyFontSize();
   updateDates();
