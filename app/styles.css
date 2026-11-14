@@ -139,6 +139,7 @@
 
   --measure: 42rem;
   --radius: 10px;
+  color-scheme: light; /* يجعل شريط التمرير والنوافذ الأصلية بلون النهار */
 }
 
 /* ألوان المساء: سماء ليلية بدل ضوء الفجر */
@@ -156,6 +157,7 @@ html[data-period="evening"] {
   --gold: #e3c05a;
   --gold-bright: #fff0b0;
   --gold-deep: #a07d1c;
+  color-scheme: dark; /* يجعل شريط التمرير والنوافذ الأصلية بلون الليل */
 }
 
 /* حجم نص الأذكار، يتحكم به قسم الإعدادات */
@@ -185,6 +187,13 @@ body {
   font-size: 1rem;
   line-height: 1.6;
   transition: background-color 0.45s ease, color 0.45s ease;
+  overscroll-behavior-y: contain; /* يمنع السحب-للتحديث أثناء التمرير أعلى الصفحة */
+}
+
+/* عناصر الضغط: لا زووم بالنقر المزدوج ولا تحديد نص عند اللمس المتكرر */
+button {
+  touch-action: manipulation;
+  user-select: none;
 }
 
 /* نقش هندسي خفيف في الخلفية، يتبع لون القسم */
