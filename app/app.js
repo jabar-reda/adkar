@@ -35,6 +35,7 @@
   // زر عدّاد، و0 = بلا عدد محدد فيصير زر التسجيل «إنهاء» بلا عدّاد.
   const DHIKR = {
     ayatKursi: {
+      id: "ayat-al-kursi",
       title: "آية الكرسي",
       count: 1,
       basmala: true,
@@ -43,6 +44,7 @@
       source: "البقرة: ٢٥٥",
     },
     ikhlas: {
+      id: "surah-al-ikhlas",
       title: "سورة الإخلاص",
       count: 3,
       basmala: true,
@@ -50,6 +52,7 @@
         "قُلْ هُوَ اللَّهُ أَحَدٌ ۝ اللَّهُ الصَّمَدُ ۝ لَمْ يَلِدْ وَلَمْ يُولَدْ ۝ وَلَمْ يَكُنْ لَهُ كُفُوًا أَحَدٌ",
     },
     falaq: {
+      id: "surah-al-falaq",
       title: "سورة الفلق",
       count: 3,
       basmala: true,
@@ -57,6 +60,7 @@
         "قُلْ أَعُوذُ بِرَبِّ الْفَلَقِ ۝ مِنْ شَرِّ مَا خَلَقَ ۝ وَمِنْ شَرِّ غَاسِقٍ إِذَا وَقَبَ ۝ وَمِنْ شَرِّ النَّفَّاثَاتِ فِي الْعُقَدِ ۝ وَمِنْ شَرِّ حَاسِدٍ إِذَا حَسَدَ",
     },
     nas: {
+      id: "surah-an-nas",
       title: "سورة الناس",
       count: 3,
       basmala: true,
@@ -64,6 +68,7 @@
         "قُلْ أَعُوذُ بِرَبِّ النَّاسِ ۝ مَلِكِ النَّاسِ ۝ إِلَٰهِ النَّاسِ ۝ مِنْ شَرِّ الْوَسْوَاسِ الْخَنَّاسِ ۝ الَّذِي يُوَسْوِسُ فِي صُدُورِ النَّاسِ ۝ مِنَ الْجِنَّةِ وَالنَّاسِ",
     },
     sayyidAlIstighfar: {
+      id: "sayyid-al-istighfar",
       title: "سيد الاستغفار",
       count: 1,
       lines: [
@@ -71,6 +76,7 @@
       ],
     },
     raditu: {
+      id: "raditu-billahi-rabban",
       title: "رضيت بالله ربًّا",
       count: 3,
       lines: [
@@ -78,6 +84,7 @@
       ],
     },
     bismillah: {
+      id: "bismillah-alladhi-la-yadurr",
       title: "بسم الله الذي لا يضر",
       count: 3,
       lines: [
@@ -85,6 +92,7 @@
       ],
     },
     afiyah: {
+      id: "dua-al-afiyah",
       title: "اللهم إني أسألك العفو والعافية",
       count: 1,
       lines: [
@@ -92,6 +100,7 @@
       ],
     },
     alimAlGhayb: {
+      id: "dua-alim-al-ghayb",
       title: "اللهم عالم الغيب والشهادة",
       count: 1,
       lines: [
@@ -99,6 +108,7 @@
       ],
     },
     yaHayyu: {
+      id: "ya-hayyu-ya-qayyum",
       title: "يا حي يا قيوم",
       count: 1,
       lines: [
@@ -106,11 +116,13 @@
       ],
     },
     subhanAllah: {
+      id: "subhan-allah-wa-bihamdih",
       title: "سبحان الله وبحمده",
       count: 100,
       lines: ["سُبْحَانَ اللَّهِ وَبِحَمْدِهِ."],
     },
     istighfar: {
+      id: "astaghfirullah-wa-atubu",
       title: "أستغفر الله وأتوب إليه",
       count: 0,
       lines: ["أَسْتَغْفِرُ اللَّهَ وَأَتُوبُ إِلَيْهِ."],
@@ -124,6 +136,7 @@
     DHIKR.falaq,
     DHIKR.nas,
     {
+      id: "morning-opening",
       title: "أصبحنا وأصبح الملك لله",
       count: 1,
       lines: [
@@ -133,6 +146,7 @@
       ],
     },
     {
+      id: "morning-by-you",
       title: "اللهم بك أصبحنا",
       count: 1,
       lines: [
@@ -143,6 +157,7 @@
     DHIKR.raditu,
     DHIKR.bismillah,
     {
+      id: "morning-blessing",
       title: "اللهم ما أصبح بي من نعمة",
       count: 1,
       lines: [
@@ -153,6 +168,7 @@
     DHIKR.alimAlGhayb,
     DHIKR.yaHayyu,
     {
+      id: "morning-fitrah",
       title: "أصبحنا على فطرة الإسلام",
       count: 1,
       lines: [
@@ -170,6 +186,7 @@
   /* ===== أذكار الاستيقاظ (مكمّلة لأذكار الصباح) ===== */
   const WAKE_ITEMS = [
     {
+      id: "wake-after-sleep",
       title: "الحمد لله الذي أحيانا بعد ما أماتنا",
       count: 1,
       lines: [
@@ -178,6 +195,7 @@
       source: "البخاري ٦٣١٢، مسلم ٢٧١١",
     },
     {
+      id: "wake-health",
       title: "الحمد لله الذي عافاني في جسدي",
       count: 1,
       lines: [
@@ -186,6 +204,7 @@
       source: "الترمذي ٣٤٠١",
     },
     {
+      id: "wake-tawhid",
       title: "لا إله إلا الله وحده لا شريك له",
       count: 1,
       lines: [
@@ -195,6 +214,7 @@
       source: "البخاري ١١٥٤، أبو داود ٥٠٦٠",
     },
     {
+      id: "wake-al-wahid",
       title: "لا إله إلا الله الواحد القهار",
       count: 1,
       lines: [
@@ -204,6 +224,7 @@
       source: "النسائي في السنن الكبرى ١٠٦٣٤",
     },
     {
+      id: "wake-protection",
       title: "أعوذ بكلمات الله التامات",
       count: 1,
       lines: [
@@ -221,6 +242,7 @@
     DHIKR.falaq,
     DHIKR.nas,
     {
+      id: "evening-opening",
       title: "أمسينا وأمسى الملك لله",
       count: 1,
       lines: [
@@ -230,6 +252,7 @@
       ],
     },
     {
+      id: "evening-by-you",
       title: "اللهم بك أمسينا",
       count: 1,
       lines: [
@@ -240,6 +263,7 @@
     DHIKR.raditu,
     DHIKR.bismillah,
     {
+      id: "evening-blessing",
       title: "اللهم ما أمسى بي من نعمة",
       count: 1,
       lines: [
@@ -250,6 +274,7 @@
     DHIKR.alimAlGhayb,
     DHIKR.yaHayyu,
     {
+      id: "evening-fitrah",
       title: "أمسينا على فطرة الإسلام",
       count: 1,
       lines: [
@@ -258,6 +283,7 @@
     },
     DHIKR.subhanAllah,
     {
+      id: "evening-protection",
       title: "أعوذ بكلمات الله التامات من شر ما خلق",
       count: 3,
       lines: ["أَعُوذُ بِكَلِمَاتِ اللَّهِ التَّامَّاتِ مِنْ شَرِّ مَا خَلَقَ."],
@@ -268,6 +294,7 @@
         "يُستحب الإكثار من الاستغفار، ولا يلزم عدد محدد لهذا اللفظ في أذكار المساء.",
     },
     {
+      id: "dua-protection-from-fire",
       title: "اللهم أجرني من النار",
       count: 0,
       lines: ["اللَّهُمَّ أَجِرْنِي مِنَ النَّارِ."],
@@ -279,6 +306,7 @@
   /* ===== أذكار النوم (مكمّلة لأذكار المساء) ===== */
   const SLEEP_ITEMS = [
     {
+      id: "last-two-baqarah",
       title: "آخر آيتين من سورة البقرة",
       count: 1,
       ayah:
@@ -286,12 +314,14 @@
       source: "البقرة: ٢٨٥-٢٨٦",
     },
     {
+      id: "sleep-in-your-name",
       title: "باسمك اللهم أموت وأحيا",
       count: 1,
       lines: ["بِاسْمِكَ اللَّهُمَّ أَمُوتُ وَأَحْيَا."],
       source: "البخاري ٦٣٢٤",
     },
     {
+      id: "sleep-surrender",
       title: "اللهم أسلمت نفسي إليك",
       count: 1,
       lines: [
@@ -301,30 +331,35 @@
       source: "البخاري ٢٤٧، مسلم ٢٧١٠",
     },
     {
+      id: "sleep-protection",
       title: "اللهم قني عذابك يوم تبعث عبادك",
       count: 3,
       lines: ["اللَّهُمَّ قِنِي عَذَابَكَ يَوْمَ تَبْعَثُ عِبَادَكَ."],
       source: "أبو داود ٥٠٤٥",
     },
     {
+      id: "sleep-subhan-allah",
       title: "سبحان الله",
       count: 33,
       lines: ["سُبْحَانَ اللَّهِ."],
       source: "البخاري ٦٣١٨، مسلم ٢٧٢٧",
     },
     {
+      id: "sleep-alhamdulillah",
       title: "الحمد لله",
       count: 33,
       lines: ["الْحَمْدُ لِلَّهِ."],
       source: "البخاري ٦٣١٨، مسلم ٢٧٢٧",
     },
     {
+      id: "sleep-allahu-akbar",
       title: "الله أكبر",
       count: 34,
       lines: ["اللَّهُ أَكْبَرُ."],
       source: "البخاري ٦٣١٨، مسلم ٢٧٢٧",
     },
     {
+      id: "sleep-placed-my-side",
       title: "باسمك ربي وضعت جنبي",
       count: 1,
       lines: [
@@ -333,6 +368,7 @@
       source: "البخاري ٦٣٢٠، مسلم ٢٧١٤",
     },
     {
+      id: "sleep-my-soul",
       title: "اللهم خلقت نفسي وأنت تتوفاها",
       count: 1,
       lines: [
@@ -341,6 +377,7 @@
       source: "مسلم ٢٧١٢",
     },
     {
+      id: "sleep-gratitude",
       title: "الحمد لله الذي أطعمنا وسقانا وكفانا وآوانا",
       count: 1,
       lines: [
@@ -406,17 +443,19 @@
   const dayKey = (date = new Date()) =>
     `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 
-  // هوية الذكر مشتقة من عنوانه لا موضعه، فتظل ثابتة عند إعادة ترتيب القائمة.
-  function stableItemId(item) {
-    const source = String(item.id || item.title || "untitled").normalize("NFKC").trim();
+  // الهوية الصريحة لا تعتمد على العنوان أو موضع الذكر؛ غيّرها فقط عند إضافة ذكر جديد.
+  const stableItemId = (item) => item.id;
+  const itemKey = (period, item) => period + "-" + stableItemId(item);
+  // مفاتيح الإصدارات السابقة تُقرأ مرة واحدة ثم تُحفظ بالهوية الصريحة.
+  function previousTitleKey(period, item) {
+    const source = String(item.title || "untitled").normalize("NFKC").trim();
     let hash = 2166136261;
     for (let index = 0; index < source.length; index += 1) {
       hash ^= source.charCodeAt(index);
       hash = Math.imul(hash, 16777619);
     }
-    return (hash >>> 0).toString(36);
+    return period + "-" + (hash >>> 0).toString(36);
   }
-  const itemKey = (period, item) => period + "-" + stableItemId(item);
   const legacyItemKey = (period, index) => period + "-" + index;
   const sanitizeStats = (raw) => {
     const value = Number(raw && raw.bestStreak);
@@ -467,7 +506,7 @@
       SECTIONS[period].items.forEach((item, index) => {
         const key = itemKey(period, item);
         // نقرأ المفتاح القديم أثناء الترحيل فقط، ثم نحفظ الهوية الجديدة.
-        const entry = record[key] || record[legacyItemKey(period, index)];
+        const entry = record[key] || record[previousTitleKey(period, item)] || record[legacyItemKey(period, index)];
         if (!entry || typeof entry !== "object" || Array.isArray(entry)) return;
         if (item.count === 0) {
           day[period][key] = { count: 0, done: Boolean(entry.done) };
