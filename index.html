@@ -7,6 +7,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="متابعة يومية لأذكار الصباح والمساء مع حفظ التقدم في المتصفح.">
+  <!-- سياسة أمان: لا سكربت خارجي أو سطري؛ لا أسلوباً سطرياً (يمنعه فحص
+       الاختبارات) — وضبط app.js لأبعاد الشرائط يتم عبر CSSOM وهو خارج
+       نطاق style-src أصلاً، فلا حاجة إلى 'unsafe-inline'. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; img-src 'self' data:">
   <title>أذكار الصباح والمساء | متابعة يومية</title>
 
   <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
@@ -265,7 +269,9 @@
   <!-- منطقة الإعلانات لقارئ الشاشة: يكتب app.js الرسائل فيها فتُنطق تلقائياً -->
   <p class="sr-only" id="live" aria-live="polite"></p>
 
-  <!-- آخر سكربت: ينتظر اكتمال DOM لأنه في نهاية body -->
+  <!-- آخر سكربتين: data.js يوفر نصوص الأذكار، ثم app.js المنطق؛
+       كلاهما ينتظر اكتمال DOM لأنهما في نهاية body -->
+  <script src="app/data.js"></script>
   <script src="app/app.js"></script>
 </body>
 </html>
