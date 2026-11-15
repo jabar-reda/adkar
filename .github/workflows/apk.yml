@@ -173,12 +173,19 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          gh release create "$GITHUB_REF_NAME" \
-            "dist/adkar-v${VERSION}.apk#Adkar v${VERSION} APK" \
-            "dist/adkar-v${VERSION}.apk.sha256#SHA-256 checksum" \
-            --title "Adkar v${VERSION}" \
-            --generate-notes \
-            --verify-tag
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" \
+              "dist/adkar-v${VERSION}.apk#Adkar v${VERSION} APK" \
+              "dist/adkar-v${VERSION}.apk.sha256#SHA-256 checksum" \
+              --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              "dist/adkar-v${VERSION}.apk#Adkar v${VERSION} APK" \
+              "dist/adkar-v${VERSION}.apk.sha256#SHA-256 checksum" \
+              --title "Adkar v${VERSION}" \
+              --generate-notes \
+              --verify-tag
+          fi
 
       - name: تنظيف مفتاح التوقيع
         if: always()
