@@ -91,6 +91,29 @@ function fail(message) {
   if (openBraces === closeBraces) pass(`styles.css: ${openBraces} balanced rule blocks`);
   else fail(`styles.css: ${openBraces} "{" but ${closeBraces} "}"`);
 
+  /* دالة حماية خلية CSV تُقيَّم معزولة من مصدر app.js، فتُفحص الحماية من
+     حقن الصيغ والتغليف حتى لو غيّرت صياغة الملف لاحقاً. */
+  const csvCellSource = app.slice(
+    app.indexOf("function csvCell"),
+    app.indexOf("function exportCsv", app.indexOf("function csvCell"))
+  );
+  try {
+    const csvCell = vm.runInNewContext("(" + csvCellSource + ")");
+    const csvCases = [
+      ["'=1+1", csvCell("=1+1")],
+      ["\"'=a,\"\"b\"\"\"", csvCell("=a,\"b\"")],
+      ["'@SUM(A1)", csvCell("@SUM(A1)")],
+      ["نعم", csvCell("نعم")],
+      ["2026-11-15", csvCell("2026-11-15")],
+      ["\"سطر\"\"داخل الخلية\"", csvCell('سطر"داخل الخلية')],
+    ];
+    const wrongCsv = csvCases.filter(([expected, actual]) => expected !== actual);
+    if (wrongCsv.length === 0) pass("csvCell neutralizes formulas and wraps correctly");
+    else fail(`csvCell output mismatch: ${JSON.stringify(wrongCsv[0])}`);
+  } catch (error) {
+    fail(`csvCell could not be evaluated -> ${error.message}`);
+  }
+
   /* ===== بنية الملفات ===== */
   if (/<style[\s>]/.test(html)) fail("index.html still contains an inline <style> block");
   else pass("index.html has no inline style block");
@@ -120,6 +143,24 @@ function fail(message) {
   } else {
     fail("config.js must load before theme-init.js");
   }
+
+  if (html.indexOf("app/data.js") >= 0 && html.indexOf("app/data.js") < html.indexOf("app/app.js")) {
+    pass("data.js loads before app.js");
+  } else {
+    fail("data.js must load before app.js");
+  }
+
+  /* ===== سياسة الأمان ===== */
+  const CSP_POLICY = "default-src 'self'; style-src 'self'; img-src 'self' data:";
+  const cspMatch = html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)">/);
+  if (cspMatch && cspMatch[1] === CSP_POLICY) {
+    pass("index.html declares the expected content security policy");
+  } else {
+    fail(`CSP meta tag missing or unexpected (expected: ${CSP_POLICY})`);
+  }
+
+  if (/\sstyle=/.test(html)) fail("index.html contains an inline style attribute");
+  else pass("index.html has no inline style attribute");
 
   if (/window\.ADKAR_CONFIG/.test(app) && /window\.ADKAR_CONFIG/.test(themeInit)) {
     pass("app.js and theme-init.js share window.ADKAR_CONFIG");
