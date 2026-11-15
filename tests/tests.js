@@ -7,27 +7,20 @@ const vm = require("vm");
 const ROOT = path.join(__dirname, "..");
 const read = (name) => fs.readFileSync(path.join(ROOT, name), "utf8");
 const APP_SOURCE = read("app/app.js");
-const DHIKR_SHARED_SOURCE = APP_SOURCE.slice(
-  APP_SOURCE.indexOf("const DHIKR = {"),
-  APP_SOURCE.indexOf("/* ===== أذكار الصباح")
-);
-const SHARED_DHIKR_IDS = new Map(
-  [...DHIKR_SHARED_SOURCE.matchAll(/^\s{4}(\w+): {\s*\n\s{6}id: "([^"]+)"/gm)]
-    .map((match) => [match[1], match[2]])
-);
-const DHIKR_COUNTS = new Map(
-  [...APP_SOURCE.matchAll(/id: "([^"]+)",\s*\n\s*title: "[^"]+",\s*\n\s*count: (\d+)/g)]
-    .map((match) => [match[1], Number(match[2])])
-);
-function getSectionItemIds(name, endMarker) {
-  const start = APP_SOURCE.indexOf("const " + name + " = [");
-  const end = APP_SOURCE.indexOf(endMarker, start);
-  const block = APP_SOURCE.slice(start, end);
-  return [...block.matchAll(/DHIKR\.(\w+)|id: "([^"]+)"/g)]
-    .map((match) => match[1] ? SHARED_DHIKR_IDS.get(match[1]) : match[2]);
-}
-const MORNING_ITEM_IDS = getSectionItemIds("MORNING_ITEMS", "/* ===== أذكار الاستيقاظ");
-const EVENING_ITEM_IDS = getSectionItemIds("EVENING_ITEMS", "/* ===== أذكار النوم");
+
+// بيانات الأذكار تُقرأ من app/data.js مباشرة: تقييمه في سياق معزول بـ window فارغ،
+// فلا اعتماد على تعابير نمطية تفكك نص المصدر.
+const DATA_SOURCE = read("app/data.js");
+const ADKAR_DATA = vm.runInNewContext(DATA_SOURCE + "\nwindow.ADKAR_DATA;", { window: {} });
+const ALL_ITEMS = [
+  ADKAR_DATA.MORNING_ITEMS,
+  ADKAR_DATA.WAKE_ITEMS,
+  ADKAR_DATA.EVENING_ITEMS,
+  ADKAR_DATA.SLEEP_ITEMS,
+].flat();
+const DHIKR_COUNTS = new Map(ALL_ITEMS.map((item) => [item.id, item.count]));
+const MORNING_ITEM_IDS = ADKAR_DATA.MORNING_ITEMS.map((item) => item.id);
+const EVENING_ITEM_IDS = ADKAR_DATA.EVENING_ITEMS.map((item) => item.id);
 
 let passed = 0;
 let failed = 0;
@@ -55,6 +48,7 @@ function fail(message) {
   const html = read("index.html");
   const app = read("app/app.js");
   const themeInit = read("app/theme-init.js");
+  const dataSource = read("app/data.js");
   const css = read("app/styles.css");
   const faviconSvg = read("app/favicon.svg");
   const faviconIco = fs.readFileSync(path.join(ROOT, "favicon.ico"));
@@ -67,15 +61,20 @@ function fail(message) {
   if (app.includes('navigator.locks.request("adkar-progress-write"')) pass("cross-tab writes use the Web Locks API");
   else fail("cross-tab writes are not serialized with Web Locks");
 
-  const explicitIds = [...app.matchAll(/^\s*id: "([a-z0-9-]+)",\s*\n\s*title:/gm)].map((match) => match[1]);
-  if (explicitIds.length === 37 && new Set(explicitIds).size === explicitIds.length) pass("all 37 dhikr records have unique explicit IDs");
-  else fail(`dhikr explicit IDs: ${explicitIds.length} records, ${new Set(explicitIds).size} unique`);
+  const allItemIds = ALL_ITEMS.map((item) => item.id);
+  if (allItemIds.length === 49 && new Set(allItemIds).size === 37) pass("all 37 unique dhikr IDs across 49 list entries");
+  else fail(`dhikr explicit IDs: ${allItemIds.length} entries, ${new Set(allItemIds).size} unique`);
+
+  const missingCounts = ALL_ITEMS.filter((item) => !Number.isInteger(item.count) || item.count < 0);
+  if (missingCounts.length === 0 && ADKAR_DATA.DHIKR && typeof ADKAR_DATA.DHIKR === "object") pass("every dhikr record carries a non-negative count");
+  else fail(`dhikr counts malformed: ${missingCounts.map((item) => item.id).join(", ")}`);
 
   if (fs.existsSync(path.join(ROOT, "tests/cross-tab-sync.html"))) pass("two-context browser synchronization fixture exists");
   else fail("missing two-context browser synchronization fixture");
 
   /* ===== الصياغة ===== */
   [
+    ["app/data.js", dataSource],
     ["app/app.js", app],
     ["app/theme-init.js", themeInit],
   ].forEach(([name, source]) => {
@@ -103,6 +102,7 @@ function fail(message) {
     ['<link rel="stylesheet" href="app/styles.css">', "app/styles.css"],
     ['<script src="app/config.js"></script>', "app/config.js"],
     ['<script src="app/theme-init.js"></script>', "app/theme-init.js"],
+    ['<script src="app/data.js"></script>', "app/data.js"],
     ['<script src="app/app.js"></script>', "app/app.js"],
   ].forEach(([needle, name]) => {
     if (html.includes(needle)) pass(`index.html links ${name}`);
@@ -228,6 +228,7 @@ async function runSimulationTests() {
 const root = path.join(__dirname, "..");
 const config = fs.readFileSync(path.join(root, "app", "config.js"), "utf8");
 const themeInit = fs.readFileSync(path.join(root, "app", "theme-init.js"), "utf8");
+const data = fs.readFileSync(path.join(root, "app", "data.js"), "utf8");
 const app = fs.readFileSync(path.join(root, "app", "app.js"), "utf8");
 
 /* ===== DOM مصغّر للاختبار ===== */
@@ -672,6 +673,7 @@ vm.createContext(sandbox);
 /* ===== تشغيل سكربتات الصفحة ===== */
 vm.runInContext(config, sandbox);
 vm.runInContext(themeInit, sandbox);
+vm.runInContext(data, sandbox);
 vm.runInContext(app, sandbox);
 
 /* ===== أدوات الاختبار ===== */
