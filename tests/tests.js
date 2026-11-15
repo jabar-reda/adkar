@@ -1247,6 +1247,26 @@ async function runAsyncTests() {
   check("invalid import rejected", byId.get("backup-status").classList.contains("is-error"));
   check("invalid import hides preview", byId.get("import-confirm").hidden === true);
 
+  /* نسخة احتياطية لا تحتوي أياماً — تُقبل ولا تُرفض */
+  importFile.files = [{
+    size: 30,
+    text: () => Promise.resolve(JSON.stringify({ schemaVersion: 2, days: {} })),
+  }];
+  importFile.dispatch("change");
+  await new Promise((resolve) => setImmediate(resolve));
+  check(
+    "empty backup is accepted with a preview",
+    byId.get("import-confirm").hidden === false,
+    byId.get("backup-status").textContent
+  );
+  check(
+    "empty backup preview warns about replace",
+    byId.get("import-summary").textContent.includes("سيمسح كل تقدمك"),
+    byId.get("import-summary").textContent
+  );
+  byId.get("import-cancel").click();
+  check("empty backup cancel closes the preview", byId.get("import-confirm").hidden === true);
+
   /* إكمال قسم الصباح، وآخر ذكر من داخل العدّاد */
   for (let index = 0; index < list.children.length; index += 1) {
     if (index === 14) continue;

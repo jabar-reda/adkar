@@ -1893,9 +1893,6 @@
 
     const days = sanitizeDays(raw.days);
     const dayCount = Object.keys(days).length;
-    if (dayCount === 0) {
-      return { ok: false, reason: "الملف لا يحتوي أي بيانات صالحة." };
-    }
 
     return {
       ok: true,
@@ -1903,7 +1900,7 @@
       settings: normalizeSettings(raw.settings),
       stats: sanitizeStats(raw.stats),
       dayCount,
-      lastDate: Object.keys(days).sort().slice(-1)[0],
+      lastDate: Object.keys(days).sort().slice(-1)[0] || null,
     };
   }
 
@@ -2028,10 +2025,11 @@
         if (!result.ok) throw new Error(result.reason);
 
         pendingImport = result;
-        elements.importSummary.textContent =
-          `الملف يحتوي ${formatDayTotal(result.dayCount)}، آخرها ${formatBackupDate(
-            result.lastDate
-          )}. «دمج» يحتفظ بالعدد الأكبر لكل ذكر ويبقي إعداداتك، و«استبدال» يمسح كل ما لديك.`;
+        elements.importSummary.textContent = result.dayCount === 0
+          ? "الملف لا يحتوي أيام مسجلة. «دمج» لن يغيّر شيئاً، و«استبدال» سيمسح كل تقدمك الحالي."
+          : `الملف يحتوي ${formatDayTotal(result.dayCount)}، آخرها ${formatBackupDate(
+              result.lastDate
+            )}. «دمج» يحتفظ بالعدد الأكبر لكل ذكر ويبقي إعداداتك، و«استبدال» يمسح كل ما لديك.`;
         elements.importConfirm.hidden = false;
         setBackupStatus("");
       })
@@ -2172,7 +2170,11 @@
     }
 
     finishImport();
-    setBackupStatus(`تم استيراد ${formatDayTotal(imported.dayCount)}.`);
+    setBackupStatus(
+      imported.dayCount === 0
+        ? "تم استبدال التقدم بنسخة لا تحتوي أياماً."
+        : `تم استيراد ${formatDayTotal(imported.dayCount)}.`
+    );
     announce("تم استيراد النسخة الاحتياطية");
   }
 
@@ -2191,7 +2193,9 @@
 
     finishImport();
     setBackupStatus(
-      `تم دمج ${formatDayTotal(imported.dayCount)} من الملف، ${describeMergedDays(addedDays)}.`
+      imported.dayCount === 0
+        ? "تم دمج النسخة، ولم تحتوِ أياماً فلم يُضف شيء."
+        : `تم دمج ${formatDayTotal(imported.dayCount)} من الملف، ${describeMergedDays(addedDays)}.`
     );
     announce("تم دمج النسخة الاحتياطية");
   }
