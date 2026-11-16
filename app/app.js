@@ -4,9 +4,10 @@
    المساعدة، فالحالة والتخزين، فالإعدادات، فبناء الواجهة وتحديثها، فالإحصاءات
    (السلسلة والتقويم)، فالعدّاد الكبير، فالنسخ الاحتياطي، وأخيراً ربط
    الأحداث وبدء التشغيل.
-   كل التقدم يُحفظ في localStorage والصفحة تعمل دون أي اتصال شبكي.
+   كل التقدم يُحفظ عبر طبقة app/storage.js (localStorage على الويب، Capacitor
+   Preferences داخل APK) والصفحة تعمل دون أي اتصال شبكي.
    ========================================================================== */
-(function () {
+(async function () {
   "use strict";
 
   /* ===== الثوابت ===== */
@@ -242,10 +243,40 @@
     return days;
   }
 
+  // قراءة متزامنة من localStorage لأغراض الترحيل فقط (إصدارات APK القديمة).
+  function readLegacyLocalStorage() {
+    try { return localStorage.getItem(STORAGE_KEY); }
+    catch (error) { return null; }
+  }
+
   // لا نعامل البيانات التالفة كحالة فارغة؛ نوقف الكتابة كي لا نمحو الأصل.
   function loadState() {
+    if (ADKAR_STORAGE.isNative) {
+      return ADKAR_STORAGE.get(STORAGE_KEY).then((raw) => {
+        if (raw) return parseLoadedState(raw);
+        // ترحيل لمرة واحدة: إصدارات APK السابقة كانت تحفظ في localStorage،
+        // فنقرأها وننسخها إلى Preferences حتى لا تظهر بيانات المستخدم مفقودة.
+        const legacy = readLegacyLocalStorage();
+        if (!legacy) return parseLoadedState(null);
+        const parsed = parseLoadedState(legacy);
+        if (!storageBlocked) ADKAR_STORAGE.set(STORAGE_KEY, legacy).catch(() => {});
+        return parsed;
+      });
+    }
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
+      return parseLoadedState(raw);
+    } catch (error) {
+      storageLoadIssue = error && error.name === "SecurityError"
+        ? "المتصفح منع الوصول إلى التخزين المحلي. لن نحاول الكتابة حتى يصبح التخزين متاحاً."
+        : "تعذّرت قراءة بيانات التقدم المخزنة. أوقفنا الحفظ التلقائي حتى لا تُستبدل البيانات التالفة.";
+      storageBlocked = true;
+      return { schemaVersion: STATE_SCHEMA_VERSION, days: {}, stats: { bestStreak: 0 } };
+    }
+  }
+
+  function parseLoadedState(raw) {
+    try {
       if (!raw) return { schemaVersion: STATE_SCHEMA_VERSION, days: {}, stats: { bestStreak: 0 } };
       const parsed = JSON.parse(raw);
       if (!hasValidStoredShape(parsed)) {
@@ -279,13 +310,32 @@
     }
   }
 
-  function saveState() {
-    if (storageBlocked) { reportStorageState(false); return false; }
+  // يطبّق قواعد الحفظ المشتركة على الحالة ويعيد لقطة عميقة جاهزة للكتابة.
+  function prepareStateSnapshot() {
     state.schemaVersion = STATE_SCHEMA_VERSION;
     updateStreakStats();
     state.stats = sanitizeStats(state.stats);
     state.stats.bestStreak = Math.max(state.stats.bestStreak, getBestStreak());
-    const localSnapshot = JSON.parse(JSON.stringify(state));
+    return JSON.parse(JSON.stringify(state));
+  }
+
+  async function saveState() {
+    if (storageBlocked) { reportStorageState(false); return false; }
+    const localSnapshot = prepareStateSnapshot();
+    const hasLocksSave = (typeof navigator !== "undefined" && !!navigator.locks && typeof navigator.locks.request === "function");
+    // On the web without Web Locks (and in tests), keep the original synchronous
+    // localStorage path so reads/writes stay immediate.
+    if (!ADKAR_STORAGE.isNative && !hasLocksSave) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(localSnapshot));
+        lastPersistedState = JSON.parse(JSON.stringify(localSnapshot));
+        reportStorageState(true);
+        return true;
+      } catch (error) {
+        reportStorageState(false);
+        return false;
+      }
+    }
     // يجب التقاط قاعدة الدمج عند طلب القفل، لا عند تنفيذه؛ فقد تصل storage event
     // أثناء انتظار القفل وتحدّث lastPersistedState قبل دور هذه العملية.
     const baseSnapshot = JSON.parse(JSON.stringify(lastPersistedState || {
@@ -297,9 +347,9 @@
     // Web Locks يجعل القراءة والدمج والكتابة عملية متسلسلة بين التبويبات.
     // من دونه لا توجد primitive ذرية في localStorage تضمن منع stale overwrite.
     if (typeof navigator !== "undefined" && navigator.locks && typeof navigator.locks.request === "function") {
-      navigator.locks.request("adkar-progress-write", { mode: "exclusive" }, () => {
+      navigator.locks.request("adkar-progress-write", { mode: "exclusive" }, async () => {
         if (storageBlocked) return;
-        const raw = localStorage.getItem(STORAGE_KEY);
+        const raw = await ADKAR_STORAGE.get(STORAGE_KEY);
         const remote = parseStateSnapshot(raw);
         if (!remote) {
           storageBlocked = true;
@@ -311,7 +361,7 @@
         state = merged;
         updateStreakStats();
         state.stats.bestStreak = Math.max(state.stats.bestStreak, getBestStreak());
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        await ADKAR_STORAGE.set(STORAGE_KEY, JSON.stringify(state));
         lastPersistedState = JSON.parse(JSON.stringify(state));
         reportStorageState(true);
       }).catch(() => {
@@ -322,7 +372,7 @@
     }
 
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(localSnapshot));
+      await ADKAR_STORAGE.set(STORAGE_KEY, JSON.stringify(localSnapshot));
       lastPersistedState = JSON.parse(JSON.stringify(localSnapshot));
       reportStorageState(true);
       return true;
@@ -525,7 +575,7 @@
   let storageBlocked = false;
   let storageLoadIssue = null;
   let settings = loadSettings();
-  let state = loadState();
+  let state = await loadState();
   // آخر نسخة نعرف أنها حُفظت؛ تُستخدم كقاعدة دمج داخل قفل الكتابة بين التبويبات.
   let lastPersistedState = JSON.parse(JSON.stringify(state));
   let activePeriod = "morning";
@@ -2062,7 +2112,7 @@
     updateBackupReminder();
   }
 
-  window.addEventListener("storage", (event) => {
+  window.addEventListener("storage", async (event) => {
     // مسح التخزين من تبويب آخر يصل بحدث مفتاحه null.
     if (event.key === null) {
       settings = loadSettings();
@@ -2078,7 +2128,7 @@
       const baseState = lastPersistedState || parseStateSnapshot(event.oldValue);
       storageBlocked = false;
       storageLoadIssue = null;
-      const remoteState = loadState();
+      const remoteState = await loadState();
       if (storageBlocked) {
         reportStorageState(false);
         reloadStateFromStorage(state);
@@ -2112,5 +2162,8 @@
   applyFontSize();
   updateDates();
   updateBackupReminder();
+  if (typeof navigator !== "undefined" && navigator.storage && typeof navigator.storage.persist === "function") {
+    navigator.storage.persist().catch(() => { /* تجاهل: غير مدعوم أو مرفوض */ });
+  }
   renderPeriod(detectPeriod());
 })();
