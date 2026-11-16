@@ -7,6 +7,7 @@ const vm = require("vm");
 const ROOT = path.join(__dirname, "..");
 const read = (name) => fs.readFileSync(path.join(ROOT, name), "utf8");
 const APP_SOURCE = read("app/app.js");
+const STORAGE_SOURCE = read("app/storage.js");
 
 // بيانات الأذكار تُقرأ من app/data.js مباشرة: تقييمه في سياق معزول بـ window فارغ،
 // فلا اعتماد على تعابير نمطية تفكك نص المصدر.
@@ -61,6 +62,12 @@ function fail(message) {
   if (app.includes('navigator.locks.request("adkar-progress-write"')) pass("cross-tab writes use the Web Locks API");
   else fail("cross-tab writes are not serialized with Web Locks");
 
+  if (app.includes("function readLegacyLocalStorage") && app.includes("ADKAR_STORAGE.set(STORAGE_KEY, legacy)")) pass("native migration copies legacy localStorage progress into the adapter");
+  else fail("native migration from legacy localStorage is missing");
+
+  if (app.includes("ADKAR_STORAGE.isNative") && !app.includes("window.Capacitor")) pass("platform detection comes from the storage adapter");
+  else fail("app.js must detect the platform through ADKAR_STORAGE.isNative only");
+
   const allItemIds = ALL_ITEMS.map((item) => item.id);
   if (allItemIds.length === 49 && new Set(allItemIds).size === 37) pass("all 37 unique dhikr IDs across 49 list entries");
   else fail(`dhikr explicit IDs: ${allItemIds.length} entries, ${new Set(allItemIds).size} unique`);
@@ -75,6 +82,7 @@ function fail(message) {
   /* ===== الصياغة ===== */
   [
     ["app/data.js", dataSource],
+    ["app/storage.js", STORAGE_SOURCE],
     ["app/app.js", app],
     ["app/theme-init.js", themeInit],
   ].forEach(([name, source]) => {
@@ -124,6 +132,7 @@ function fail(message) {
   [
     ['<link rel="stylesheet" href="app/styles.css">', "app/styles.css"],
     ['<script src="app/config.js"></script>', "app/config.js"],
+    ['<script src="app/storage.js"></script>', "app/storage.js"],
     ['<script src="app/theme-init.js"></script>', "app/theme-init.js"],
     ['<script src="app/data.js"></script>', "app/data.js"],
     ['<script src="app/app.js"></script>', "app/app.js"],
@@ -138,10 +147,16 @@ function fail(message) {
     fail("theme-init.js should load before the stylesheet");
   }
 
-  if (html.indexOf("app/config.js") < html.indexOf("app/theme-init.js")) {
-    pass("config.js loads before theme-init.js");
+  if (html.indexOf("app/config.js") < html.indexOf("app/storage.js")) {
+    pass("config.js loads before storage.js");
   } else {
-    fail("config.js must load before theme-init.js");
+    fail("config.js must load before storage.js");
+  }
+
+  if (html.indexOf("app/storage.js") < html.indexOf("app/theme-init.js")) {
+    pass("storage.js loads before theme-init.js");
+  } else {
+    fail("storage.js must load before theme-init.js");
   }
 
   if (html.indexOf("app/data.js") >= 0 && html.indexOf("app/data.js") < html.indexOf("app/app.js")) {
@@ -705,17 +720,23 @@ sandbox.addEventListener = (type, handler) => {
   if (!windowListeners.has(type)) windowListeners.set(type, []);
   windowListeners.get(type).push(handler);
 };
-function dispatchWindowEvent(type, event) {
-  (windowListeners.get(type) || []).forEach((handler) => handler(event));
+async function dispatchWindowEvent(type, event) {
+  for (const handler of (windowListeners.get(type) || [])) {
+    await handler(event);
+  }
 }
 
 vm.createContext(sandbox);
 
 /* ===== تشغيل سكربتات الصفحة ===== */
 vm.runInContext(config, sandbox);
+vm.runInContext(STORAGE_SOURCE, sandbox);
 vm.runInContext(themeInit, sandbox);
 vm.runInContext(data, sandbox);
-vm.runInContext(app, sandbox);
+const appInitPromise = vm.runInContext(app, sandbox);
+if (appInitPromise && typeof appInitPromise.then === "function") {
+  await appInitPromise;
+}
 
 /* ===== أدوات الاختبار ===== */
 
@@ -1581,6 +1602,7 @@ async function runAsyncTests() {
     throw new Error("quota exceeded");
   };
   pill(0).click();
+  await new Promise((resolve) => setTimeout(resolve, 0));
   check(
     "a failed save shows the storage warning",
     byId.get("storage-warning").hidden === false
@@ -1600,7 +1622,7 @@ async function runAsyncTests() {
       days: { "2026-10-31": { morning: { "morning-0": { count: 1, done: true } } } },
     })
   );
-  dispatchWindowEvent("storage", { key: "adkar.v1" });
+  await dispatchWindowEvent("storage", { key: "adkar.v1" });
   check(
     "a storage event reloads progress from another tab",
     pill(0).textContent === "تم ✓",
@@ -1608,7 +1630,7 @@ async function runAsyncTests() {
   );
 
   storage.set("adkar.settings.v1", JSON.stringify({ fontSize: "large", theme: "auto" }));
-  dispatchWindowEvent("storage", { key: "adkar.settings.v1" });
+  await dispatchWindowEvent("storage", { key: "adkar.settings.v1" });
   check(
     "a storage event applies settings from another tab",
     document.documentElement.dataset.fontSize === "large",
@@ -1634,7 +1656,7 @@ async function runAsyncTests() {
     };
   }
   storage.set("adkar.v1", JSON.stringify({ schemaVersion: 2, days: longStreakDays, stats: { bestStreak: 0 } }));
-  dispatchWindowEvent("storage", { key: "adkar.v1" });
+  await dispatchWindowEvent("storage", { key: "adkar.v1" });
   tabMorning.click();
   MORNING_ITEM_IDS.forEach((id, index) => {
     const button = pill(index);
@@ -1670,7 +1692,7 @@ async function runAsyncTests() {
     sleep: {},
   };
   storage.set("adkar.v1", JSON.stringify(migratedProgress));
-  dispatchWindowEvent("storage", { key: "adkar.v1" });
+  await dispatchWindowEvent("storage", { key: "adkar.v1" });
   // الترحيل يحدث في الذاكرة أولاً؛ احفظ تغييراً عادياً في قسم الصباح.
   tabMorning.click();
   if (pill(2).textContent === "تم ✓") resetItem(2).click();
@@ -1690,7 +1712,7 @@ async function runAsyncTests() {
   remoteProgress.days["2026-10-31"].morning = remoteProgress.days["2026-10-31"].morning || {};
   remoteProgress.days["2026-10-31"].morning[itemKeys.morning2] = { count: 1, done: false };
   storage.set("adkar.v1", JSON.stringify(remoteProgress));
-  dispatchWindowEvent("storage", { key: "adkar.v1" });
+  await dispatchWindowEvent("storage", { key: "adkar.v1" });
   check(
     "storage event reloads progress from another tab",
     state().days["2026-10-31"].morning[itemKeys.morning2].count === 1,
@@ -1700,7 +1722,7 @@ async function runAsyncTests() {
   /* حماية التخزين التالف */
   const structurallyCorruptedProgress = JSON.stringify({ days: { "2026-10-31": null } });
   storage.set("adkar.v1", structurallyCorruptedProgress);
-  dispatchWindowEvent("storage", { key: "adkar.v1" });
+  await dispatchWindowEvent("storage", { key: "adkar.v1" });
   check(
     "valid JSON with a malformed day record is treated as corruption",
     byId.get("storage-warning").hidden === false
@@ -1715,7 +1737,7 @@ async function runAsyncTests() {
   /* حماية التخزين التالف */
   const corruptedProgress = "{ invalid json";
   storage.set("adkar.v1", corruptedProgress);
-  dispatchWindowEvent("storage", { key: "adkar.v1" });
+  await dispatchWindowEvent("storage", { key: "adkar.v1" });
   check(
     "corrupted progress displays a warning",
     byId.get("storage-warning").hidden === false
@@ -1732,9 +1754,63 @@ async function runAsyncTests() {
 await runAsyncTests();
 }
 
+/* ===== اختبارات طبقة التخزين (storage.js) ===== */
+async function runStorageAdapterTests() {
+  // فرع المتصفح: isNative=false، set/get/remove، ورفض set عند فشل localStorage.
+  {
+    const store = new Map();
+    const localStorageMock = {
+      getItem: (key) => (store.has(key) ? store.get(key) : null),
+      setItem: (key, value) => store.set(key, String(value)),
+      removeItem: (key) => store.delete(key),
+    };
+    const context = { window: {}, localStorage: localStorageMock, Promise, String, Object, Error };
+    context.window = context;
+    vm.createContext(context);
+    vm.runInContext(STORAGE_SOURCE, context);
+    const adapter = context.ADKAR_STORAGE;
+    check("storage web: isNative is false", adapter.isNative === false);
+    await adapter.set("k", "v");
+    check("storage web: set/get round-trips", (await adapter.get("k")) === "v");
+    await adapter.remove("k");
+    check("storage web: remove clears", (await adapter.get("k")) === null);
+    localStorageMock.setItem = () => { throw new Error("quota exceeded"); };
+    let rejected = false;
+    await adapter.set("k2", "v").catch(() => { rejected = true; });
+    check("storage web: set rejects on quota error", rejected);
+  }
+
+  // فرع Capacitor: isNative=true، ويستخدم Preferences بدل localStorage.
+  {
+    const prefs = new Map();
+    const Preferences = {
+      get: ({ key }) => Promise.resolve(prefs.has(key) ? { value: prefs.get(key) } : {}),
+      set: ({ key, value }) => { prefs.set(key, value); return Promise.resolve(); },
+      remove: ({ key }) => { prefs.delete(key); return Promise.resolve(); },
+    };
+    const context = {
+      window: {},
+      localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+      Promise, String, Object, Error,
+    };
+    context.window = context;
+    context.Capacitor = { isNativePlatform: () => true, Plugins: { Preferences } };
+    vm.createContext(context);
+    vm.runInContext(STORAGE_SOURCE, context);
+    const adapter = context.ADKAR_STORAGE;
+    check("storage native: isNative is true", adapter.isNative === true);
+    await adapter.set("p", "1");
+    check("storage native: writes to Preferences", prefs.get("p") === "1");
+    check("storage native: get reads Preferences", (await adapter.get("p")) === "1");
+    await adapter.remove("p");
+    check("storage native: remove clears Preferences", prefs.has("p") === false);
+  }
+}
+
 /* ===== التشغيل ===== */
 async function runAllTests() {
   await runSimulationTests();
+  await runStorageAdapterTests();
 
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);

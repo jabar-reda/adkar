@@ -5,7 +5,8 @@
   "description": "أدوات بناء APK لتطبيق أذكار في GitHub Actions فقط — لا علاقة لها بتشغيل الموقع",
   "dependencies": {
     "@capacitor/android": "^8.0.0",
-    "@capacitor/core": "^8.0.0"
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/preferences": "^8.0.0"
   },
   "devDependencies": {
     "@capacitor/assets": "^4.0.0",

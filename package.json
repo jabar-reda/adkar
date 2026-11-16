@@ -1,6 +1,6 @@
 {
   "name": "adkar",
-  "version": "1.0.1",
+  "version": "1.0.4",
   "private": true,
   "description": "متابعة يومية لأذكار الصباح والمساء، بدون خادم أو مكتبات خارجية.",
   "scripts": {
