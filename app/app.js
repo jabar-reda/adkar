@@ -854,25 +854,19 @@
     }
   }
 
-  /* بناء بطاقة ذكر واحدة وإرجاعها.
-     كل بطاقة تُغلق على حالتها الخاصة (progress) ودوالها: paint يعيد
-     رسم الشكل، persist يحفظ في التخزين، increment وresetProgress
-     يعدّلان الحالة ويسجلان إجراءً قابلاً للتراجع. تُجمع المؤشرات في
-     itemControllers لتبقى مفاتيح التراجع والعدّاد تعمل بعد أي إعادة رسم. */
   /**
-   * @param {string} period
+   * عناصر بطاقة الذكر التي يعيد رسمها paintItemCard.
+   * @typedef {{ card: HTMLLIElement, pill: HTMLButtonElement, undo: HTMLButtonElement }} ItemCardNodes
+   */
+
+  /**
+   * يبني هيكل بطاقة الذكر ويربط زر العدّاد، دون أي منطق تقدم.
    * @param {DhikrItem} item
    * @param {number} index
-   * @returns {HTMLLIElement}
+   * @param {string} entryKey
+   * @returns {ItemCardNodes}
    */
-  function createItem(period, item, index) {
-    const key = itemKey(period, item);
-    const saved = getEntry(period, key);
-    const progress = {
-      count: Number(saved && saved.count) || 0,
-      done: Boolean(saved && saved.done),
-    };
-
+  function buildItemCard(item, index, entryKey) {
     const card = document.createElement("li");
     card.className = "dhikr";
 
@@ -910,7 +904,7 @@
     counterButton.className = "counter-open";
     counterButton.textContent = "عدّ";
     counterButton.setAttribute("aria-label", `فتح العدّاد: ${item.title}`);
-    counterButton.addEventListener("click", () => openCounter(key, counterButton));
+    counterButton.addEventListener("click", () => openCounter(entryKey, counterButton));
 
     const pill = document.createElement("button");
     pill.type = "button";
@@ -927,23 +921,53 @@
     body.append(actions);
     card.append(marker, body);
 
-    const isComplete = () =>
-      item.count === 0 ? progress.done : progress.count >= item.count;
+    return { card, pill, undo };
+  }
+
+  // رسم البطاقة من قيمة progress الحالية: النص، حالات aria،
+  // وإظهار زر «إعادة» عند وجود تقدم فقط.
+  /**
+   * @param {ItemCardNodes} nodes
+   * @param {DhikrItem} item
+   * @param {DayEntry} progress
+   * @returns {void}
+   */
+  function paintItemCard(nodes, item, progress) {
+    const complete = isItemComplete(item, progress);
+
+    nodes.card.classList.toggle("is-done", complete);
+    nodes.pill.classList.toggle("is-done", complete);
+    nodes.pill.textContent = complete ? "تم ✓" : buildLabel(item, progress);
+    nodes.pill.setAttribute("aria-disabled", String(complete));
+    nodes.pill.setAttribute("aria-label", buildAriaLabel(item, progress, complete));
+    if (item.count <= 1) {
+      nodes.pill.setAttribute("aria-pressed", String(complete));
+    }
+    nodes.undo.hidden = progress.count === 0 && !progress.done;
+  }
+
+  /* بناء بطاقة ذكر واحدة وإرجاعها.
+     كل بطاقة تُغلق على حالتها الخاصة (progress) ودوالها: paint يعيد
+     رسم الشكل، persist يحفظ في التخزين، increment وresetProgress
+     يعدّلان الحالة ويسجلان إجراءً قابلاً للتراجع. تُجمع المؤشرات في
+     itemControllers لتبقى مفاتيح التراجع والعدّاد تعمل بعد أي إعادة رسم. */
+  /**
+   * @param {string} period
+   * @param {DhikrItem} item
+   * @param {number} index
+   * @returns {HTMLLIElement}
+   */
+  function createItem(period, item, index) {
+    const key = itemKey(period, item);
+    const saved = getEntry(period, key);
+    const progress = {
+      count: Number(saved && saved.count) || 0,
+      done: Boolean(saved && saved.done),
+    };
+    const nodes = buildItemCard(item, index, key);
 
     function paint() {
-      // إعادة رسم البطاقة من قيمة progress الحالية: النص، حالات
-      // aria، وإظهار زر «إعادة» عند وجود تقدم فقط.
-      const complete = isComplete();
-
-      card.classList.toggle("is-done", complete);
-      pill.classList.toggle("is-done", complete);
-      pill.textContent = complete ? "تم ✓" : buildLabel(item, progress);
-      pill.setAttribute("aria-disabled", String(complete));
-      pill.setAttribute("aria-label", buildAriaLabel(item, progress, complete));
-      if (item.count <= 1) {
-        pill.setAttribute("aria-pressed", String(complete));
-      }
-      undo.hidden = progress.count === 0 && !progress.done;
+      paintItemCard(nodes, item, progress);
     }
 
     function persist() {
@@ -955,7 +979,7 @@
     }
 
     function increment() {
-      if (isComplete()) return false;
+      if (isItemComplete(item, progress)) return false;
       const before = snapshot();
 
       if (item.count === 0) {
@@ -967,9 +991,14 @@
 
       persist();
       paint();
-      showUndo(key, item.title, before, isComplete() ? "تم إكمال" : "تم تسجيل");
+      showUndo(
+        key,
+        item.title,
+        before,
+        isItemComplete(item, progress) ? "تم إكمال" : "تم تسجيل"
+      );
 
-      if (isComplete()) {
+      if (isItemComplete(item, progress)) {
         announce(`تم إكمال: ${item.title}`);
       }
       updateProgress();
@@ -989,12 +1018,12 @@
       return true;
     }
 
-    pill.addEventListener("click", increment);
-    undo.addEventListener("click", resetProgress);
+    nodes.pill.addEventListener("click", increment);
+    nodes.undo.addEventListener("click", resetProgress);
 
     paint();
     itemControllers.set(key, {
-      element: card,
+      element: nodes.card,
       item,
       period,
       index,
@@ -1008,10 +1037,10 @@
         paint();
       },
       focusPill() {
-        pill.focus({ preventScroll: true });
+        nodes.pill.focus({ preventScroll: true });
       },
     });
-    return card;
+    return nodes.card;
   }
 
   /* ===== عرض القسم ===== */
