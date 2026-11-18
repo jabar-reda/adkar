@@ -1290,6 +1290,67 @@
       `أذكار النوم ${toArabicNumber(counts.sleep)}/${toArabicNumber(SECTIONS.sleep.items.length)}.`;
   }
 
+  // اختيار يوم في التقويم: نحدّث الصنف والحالة في الخلايا القائمة بدل إعادة بناء الشبكة.
+  /**
+   * @param {string} dateKey
+   * @returns {void}
+   */
+  function selectCalendarDay(dateKey) {
+    selectedCalendarKey = dateKey;
+    const dayCells = /** @type {NodeListOf<HTMLButtonElement>} */ (
+      elements.calendarGrid.querySelectorAll(".calendar-day")
+    );
+    dayCells.forEach((dayCell) => {
+      if (!dayCell.dataset.key) return;
+      const isSelected = dayCell.dataset.key === dateKey;
+      dayCell.classList.toggle("is-selected", isSelected);
+      dayCell.setAttribute("aria-pressed", String(isSelected));
+    });
+    renderCalendarDetail();
+  }
+
+  /**
+   * يبني خلية يوم واحد في شبكة التقويم: الرقم، نقطتا الحالة، والوصف لقارئ الشاشة.
+   * @param {Date} date
+   * @param {string} todayKey
+   * @returns {HTMLButtonElement}
+   */
+  function buildCalendarCell(date, todayKey) {
+    const key = dayKey(date);
+    const isFuture = key > todayKey;
+    const completed = completionSnapshot(key);
+    const bothDone = completed.morning && completed.evening;
+    const partial = (completed.morning || completed.evening) && !bothDone;
+
+    const cell = document.createElement("button");
+    cell.type = "button";
+    cell.className = "calendar-day";
+    if (isFuture) cell.classList.add("is-future");
+    if (key === todayKey) cell.classList.add("is-today");
+    if (key === selectedCalendarKey) cell.classList.add("is-selected");
+    if (bothDone) cell.classList.add("is-complete");
+    else if (partial) cell.classList.add("is-partial");
+    cell.dataset.key = key;
+    cell.disabled = isFuture;
+    cell.setAttribute("aria-label", calendarDayLabel(date, completed, isFuture));
+    cell.setAttribute("aria-pressed", String(key === selectedCalendarKey));
+
+    const number = document.createElement("span");
+    number.textContent = toArabicNumber(date.getDate());
+
+    const dots = document.createElement("span");
+    dots.className = "calendar-dots";
+    dots.setAttribute("aria-hidden", "true");
+    dots.append(
+      calendarDot(completed.morning, completed.wake),
+      calendarDot(completed.evening, completed.sleep)
+    );
+
+    cell.append(number, dots);
+    cell.addEventListener("click", () => selectCalendarDay(key));
+    return cell;
+  }
+
   function renderCalendar() {
     const today = new Date();
     const todayKey = dayKey(today);
@@ -1318,55 +1379,7 @@
     }
 
     for (let day = 1; day <= daysInMonth; day += 1) {
-      const date = new Date(year, month, day);
-      const key = dayKey(date);
-      const isFuture = key > todayKey;
-      const completed = completionSnapshot(key);
-      const bothDone = completed.morning && completed.evening;
-      const partial = (completed.morning || completed.evening) && !bothDone;
-
-      const cell = document.createElement("button");
-      cell.type = "button";
-      cell.className = "calendar-day";
-      if (isFuture) cell.classList.add("is-future");
-      if (key === todayKey) cell.classList.add("is-today");
-      if (key === selectedCalendarKey) cell.classList.add("is-selected");
-      if (bothDone) cell.classList.add("is-complete");
-      else if (partial) cell.classList.add("is-partial");
-      cell.dataset.key = key;
-      cell.disabled = isFuture;
-      cell.setAttribute(
-        "aria-label",
-        calendarDayLabel(date, completed, isFuture)
-      );
-      cell.setAttribute("aria-pressed", String(key === selectedCalendarKey));
-
-      const number = document.createElement("span");
-      number.textContent = toArabicNumber(day);
-
-      const dots = document.createElement("span");
-      dots.className = "calendar-dots";
-      dots.setAttribute("aria-hidden", "true");
-      dots.append(
-        calendarDot(completed.morning, completed.wake),
-        calendarDot(completed.evening, completed.sleep)
-      );
-
-      cell.append(number, dots);
-      cell.addEventListener("click", () => {
-        selectedCalendarKey = key;
-        const dayCells = /** @type {NodeListOf<HTMLButtonElement>} */ (
-          elements.calendarGrid.querySelectorAll(".calendar-day")
-        );
-        dayCells.forEach((dayCell) => {
-          if (!dayCell.dataset.key) return;
-          const isSelected = dayCell.dataset.key === key;
-          dayCell.classList.toggle("is-selected", isSelected);
-          dayCell.setAttribute("aria-pressed", String(isSelected));
-        });
-        renderCalendarDetail();
-      });
-      cells.push(cell);
+      cells.push(buildCalendarCell(new Date(year, month, day), todayKey));
     }
 
     elements.calendarGrid.replaceChildren(...cells);
