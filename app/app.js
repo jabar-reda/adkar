@@ -53,7 +53,7 @@
   // النصوص والقوائم الأربعة في app/data.js المحمّل قبله؛ هذا الملف منطق فقط.
   const DATA = window.ADKAR_DATA;
   if (!DATA) throw new Error("app/data.js must load before app.js");
-  const { DHIKR, MORNING_ITEMS, WAKE_ITEMS, EVENING_ITEMS, SLEEP_ITEMS } = DATA;
+  const { MORNING_ITEMS, WAKE_ITEMS, EVENING_ITEMS, SLEEP_ITEMS } = DATA;
 
   // الأقسام الأربعة: الأساسيان (صباح/مساء) يحدّان اكتمال اليوم،
   // والمكمّلان (استيقاظ/نوم) يظهرمان داخل قسما الأساس دون دخولهما فيه.
@@ -554,7 +554,7 @@
   function countCompleted(period, dateKey = dayKey()) {
     const record = getDay(dateKey)[period];
     return SECTIONS[period].items.reduce(
-      (total, item, index) =>
+      (total, item) =>
         isItemComplete(item, record[itemKey(period, item)]) ? total + 1 : total,
       0
     );
@@ -1747,7 +1747,7 @@
     const section = SECTIONS[activePeriod];
     const record = getDay(dayKey())[activePeriod];
     const index = section.items.findIndex(
-      (item, itemIndex) => !isItemComplete(item, record[itemKey(activePeriod, item)])
+      (item) => !isItemComplete(item, record[itemKey(activePeriod, item)])
     );
     if (index === -1) return;
 
@@ -2108,7 +2108,7 @@
       const currentRecord = currentDay[period] || {};
       const importedRecord = importedDay[period] || {};
 
-      SECTIONS[period].items.forEach((item, index) => {
+      SECTIONS[period].items.forEach((item) => {
         const entryKey = itemKey(period, item);
         const entry = mergeItemEntry(item, currentRecord[entryKey], importedRecord[entryKey]);
         if (entry) merged[period][entryKey] = entry;
