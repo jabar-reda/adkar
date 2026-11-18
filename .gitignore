@@ -15,6 +15,9 @@ desktop.ini
 # ملفات مضغوطة
 adkar.zip
 
+# ملفات محلية مؤقتة وأرشيفات (غير متتبعة)
+_local/
+
 # بناء APK (يتولد داخل CI)
 apk/android/
 apk/node_modules/
