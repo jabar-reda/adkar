@@ -624,6 +624,14 @@
     if (settings.theme === "time") applyTheme();
   }
 
+  // تطبيق الإعدادات المحفوظة على الصفحة: حجم الخط، واللون، وحالة أزرار الإعدادات.
+  // كل مسار يقرأ الإعدادات من جديد (بدء التشغيل، تبويب آخر، ملف مستورد) يمر من هنا.
+  function applySettingsToUi() {
+    applyFontSize();
+    applyTheme();
+    syncSettingsUI();
+  }
+
   function syncSettingsUI() {
     elements.fontButtons.forEach((button) => {
       button.setAttribute("aria-pressed", String(button.dataset.fontSize === settings.fontSize));
@@ -2091,9 +2099,7 @@
       if (!importedSettings.lastExportAt) delete importedSettings.lastExportAt;
       settings = { ...settings, ...importedSettings };
       saveSettings();
-      applyFontSize();
-      applyTheme();
-      syncSettingsUI();
+      applySettingsToUi();
     }
 
     finishImport();
@@ -2345,9 +2351,7 @@
     // مسح التخزين من تبويب آخر يصل بحدث مفتاحه null.
     if (event.key === null) {
       settings = loadSettings();
-      applyFontSize();
-      applyTheme();
-      syncSettingsUI();
+      applySettingsToUi();
       reloadStateFromStorage();
       announce("تم تحديث البيانات من تبويب آخر");
       return;
@@ -2376,9 +2380,7 @@
 
     if (event.key === SETTINGS_KEY) {
       settings = loadSettings();
-      applyFontSize();
-      applyTheme();
-      syncSettingsUI();
+      applySettingsToUi();
       updateBackupReminder();
     }
   });
