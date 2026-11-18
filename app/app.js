@@ -533,6 +533,35 @@
     return countCompleted(period, key) === SECTIONS[period].items.length;
   }
 
+  /**
+   * عدد الأذكار المكتملة في كل الأقسام ليوم واحد، بمرور واحد على الأقسام.
+   * @param {string} dateKey
+   * @returns {{ [period: string]: number }}
+   */
+  function countAllSections(dateKey) {
+    /** @type {{ [period: string]: number }} */
+    const counts = {};
+    Object.keys(SECTIONS).forEach((period) => {
+      counts[period] = countCompleted(period, dateKey);
+    });
+    return counts;
+  }
+
+  /**
+   * هل اكتمل كل قسم في يوم واحد؟
+   * @param {string} dateKey
+   * @returns {{ [period: string]: boolean }}
+   */
+  function completionSnapshot(dateKey) {
+    const counts = countAllSections(dateKey);
+    /** @type {{ [period: string]: boolean }} */
+    const completed = {};
+    Object.keys(SECTIONS).forEach((period) => {
+      completed[period] = counts[period] === SECTIONS[period].items.length;
+    });
+    return completed;
+  }
+
   /* ===== الإعدادات ===== */
   // يبني إعدادات سليمة من أي مصدر (تخزين أو ملف استيراد): القيم غير
   // المعروفة تعود إلى الافتراضي بدل أن تبقى ولا معنى لها.
@@ -1039,10 +1068,7 @@
     const section = SECTIONS[activePeriod];
     const total = section.items.length;
     // نحسب عدّادات الأقسام مرة واحدة، لأن كل استدعاء لـ countCompleted يمر على كل الأذكار.
-    const counts = {};
-    Object.keys(SECTIONS).forEach((period) => {
-      counts[period] = countCompleted(period);
-    });
+    const counts = countAllSections(dayKey());
     const done = counts[activePeriod];
     // «اكتمل الآن» = صار العدد المساوي للإجمالي وكان أقل منه في التحديث السابق؛
     // هذا الفرق هو ما يشغّل الاحتفال مرة واحدة لا عند كل تحديث.
@@ -1188,10 +1214,10 @@
     const summary = { complete: 0, morning: 0, evening: 0 };
     const today = new Date();
     for (let offset = 6; offset >= 0; offset -= 1) {
-      const key = dayKey(addDays(today, -offset));
-      if (isSectionComplete("morning", key)) summary.morning += 1;
-      if (isSectionComplete("evening", key)) summary.evening += 1;
-      if (isDayComplete(key)) summary.complete += 1;
+      const completed = completionSnapshot(dayKey(addDays(today, -offset)));
+      if (completed.morning) summary.morning += 1;
+      if (completed.evening) summary.evening += 1;
+      if (completed.morning && completed.evening) summary.complete += 1;
     }
     return summary;
   }
@@ -1203,14 +1229,22 @@
     return dot;
   }
 
-  function calendarDayLabel(date, morningDone, eveningDone, wakeDone, sleepDone, isFuture) {
+  /**
+   * وصف خلية التقويم لقارئ الشاشة: التاريخ ثم حالة كل قسم بكلمة كاملة.
+   * @param {Date} date
+   * @param {{ [period: string]: boolean }} completed
+   * @param {boolean} isFuture
+   * @returns {string}
+   */
+  function calendarDayLabel(date, completed, isFuture) {
     const status = isFuture
       ? "لم يأت بعد"
-      : `الصباح ${morningDone ? "مكتمل" : "غير مكتمل"}، المساء ${
-          eveningDone ? "مكتمل" : "غير مكتمل"
-        }، أذكار الاستيقاظ ${wakeDone ? "مكتملة" : "غير مكتملة"}، أذكار النوم ${
-          sleepDone ? "مكتملة" : "غير مكتملة"
-        }`;
+      : [
+          `الصباح ${completed.morning ? "مكتمل" : "غير مكتمل"}`,
+          `المساء ${completed.evening ? "مكتمل" : "غير مكتمل"}`,
+          `أذكار الاستيقاظ ${completed.wake ? "مكتملة" : "غير مكتملة"}`,
+          `أذكار النوم ${completed.sleep ? "مكتملة" : "غير مكتملة"}`,
+        ].join("، ");
     return `${formatWeekday(date)} ${toArabicNumber(date.getDate())} ${formatMonthLabel(date)}: ${status}`;
   }
 
@@ -1230,16 +1264,13 @@
         `${formatWeekday(date)} ${toArabicNumber(date.getDate())} ${formatMonthLabel(date)} — لا يوجد تقدم مسجل.`;
       return;
     }
-    const morningDone = countCompleted("morning", key);
-    const eveningDone = countCompleted("evening", key);
-    const wakeDone = countCompleted("wake", key);
-    const sleepDone = countCompleted("sleep", key);
+    const counts = countAllSections(key);
     elements.calendarDetail.textContent =
       `${formatWeekday(date)} ${toArabicNumber(date.getDate())} ${formatMonthLabel(date)} — ` +
-      `الصباح ${toArabicNumber(morningDone)}/${toArabicNumber(SECTIONS.morning.items.length)}، ` +
-      `أذكار الاستيقاظ ${toArabicNumber(wakeDone)}/${toArabicNumber(SECTIONS.wake.items.length)}، ` +
-      `المساء ${toArabicNumber(eveningDone)}/${toArabicNumber(SECTIONS.evening.items.length)}، ` +
-      `أذكار النوم ${toArabicNumber(sleepDone)}/${toArabicNumber(SECTIONS.sleep.items.length)}.`;
+      `الصباح ${toArabicNumber(counts.morning)}/${toArabicNumber(SECTIONS.morning.items.length)}، ` +
+      `أذكار الاستيقاظ ${toArabicNumber(counts.wake)}/${toArabicNumber(SECTIONS.wake.items.length)}، ` +
+      `المساء ${toArabicNumber(counts.evening)}/${toArabicNumber(SECTIONS.evening.items.length)}، ` +
+      `أذكار النوم ${toArabicNumber(counts.sleep)}/${toArabicNumber(SECTIONS.sleep.items.length)}.`;
   }
 
   function renderCalendar() {
@@ -1273,12 +1304,9 @@
       const date = new Date(year, month, day);
       const key = dayKey(date);
       const isFuture = key > todayKey;
-      const morningDone = isSectionComplete("morning", key);
-      const eveningDone = isSectionComplete("evening", key);
-      const wakeDone = isSectionComplete("wake", key);
-      const sleepDone = isSectionComplete("sleep", key);
-      const bothDone = morningDone && eveningDone;
-      const partial = (morningDone || eveningDone) && !bothDone;
+      const completed = completionSnapshot(key);
+      const bothDone = completed.morning && completed.evening;
+      const partial = (completed.morning || completed.evening) && !bothDone;
 
       const cell = document.createElement("button");
       cell.type = "button";
@@ -1292,7 +1320,7 @@
       cell.disabled = isFuture;
       cell.setAttribute(
         "aria-label",
-        calendarDayLabel(date, morningDone, eveningDone, wakeDone, sleepDone, isFuture)
+        calendarDayLabel(date, completed, isFuture)
       );
       cell.setAttribute("aria-pressed", String(key === selectedCalendarKey));
 
@@ -1302,7 +1330,10 @@
       const dots = document.createElement("span");
       dots.className = "calendar-dots";
       dots.setAttribute("aria-hidden", "true");
-      dots.append(calendarDot(morningDone, wakeDone), calendarDot(eveningDone, sleepDone));
+      dots.append(
+        calendarDot(completed.morning, completed.wake),
+        calendarDot(completed.evening, completed.sleep)
+      );
 
       cell.append(number, dots);
       cell.addEventListener("click", () => {
@@ -1845,21 +1876,17 @@
     ];
 
     keys.forEach((key) => {
-      const morningDone = countCompleted("morning", key);
-      const eveningDone = countCompleted("evening", key);
-      const wakeDone = countCompleted("wake", key);
-      const sleepDone = countCompleted("sleep", key);
-      const morningComplete = isSectionComplete("morning", key);
-      const eveningComplete = isSectionComplete("evening", key);
+      const counts = countAllSections(key);
+      const completed = completionSnapshot(key);
       rows.push([
         key,
-        morningComplete ? "نعم" : "لا",
-        `${morningDone}/${SECTIONS.morning.items.length}`,
-        `${wakeDone}/${SECTIONS.wake.items.length}`,
-        eveningComplete ? "نعم" : "لا",
-        `${eveningDone}/${SECTIONS.evening.items.length}`,
-        `${sleepDone}/${SECTIONS.sleep.items.length}`,
-        morningComplete && eveningComplete ? "نعم" : "لا",
+        completed.morning ? "نعم" : "لا",
+        `${counts.morning}/${SECTIONS.morning.items.length}`,
+        `${counts.wake}/${SECTIONS.wake.items.length}`,
+        completed.evening ? "نعم" : "لا",
+        `${counts.evening}/${SECTIONS.evening.items.length}`,
+        `${counts.sleep}/${SECTIONS.sleep.items.length}`,
+        completed.morning && completed.evening ? "نعم" : "لا",
       ]);
     });
 
