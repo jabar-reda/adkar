@@ -31,6 +31,24 @@
   const DEFAULT_SETTINGS = { fontSize: "medium", theme: "auto", lastExportAt: null };
   const PERIOD_WINDOWS = CONFIG.periodWindows;
 
+  // مهل الواجهة بالمللي ثانية: مدة الاحتفال، إبراز «التالي»، بقاء شريط التراجع،
+  // ومهلة تأكيد «اضغط مرة أخرى».
+  const CELEBRATION_MS = 1200;
+  const HIGHLIGHT_MS = 2200;
+  const UNDO_VISIBLE_MS = 5000;
+  const CONFIRM_WINDOW_MS = 4000;
+  // مدة بقاء رابط التنزيل المؤقت قبل تحريره.
+  const DOWNLOAD_URL_TTL_MS = 1000;
+  // فحص تغيّر اليوم كل دقيقة، وتحديث الوقت والثيم المعتمد على الساعة كل نصف دقيقة.
+  const DAY_CHECK_INTERVAL_MS = 60000;
+  const CLOCK_INTERVAL_MS = 30000;
+  // حدود السحب الأفقي بين القسمين.
+  const SWIPE_MIN_DISTANCE_PX = 60;
+  const SWIPE_MAX_DURATION_MS = 600;
+  const SWIPE_EDGE_MARGIN_PX = 24;
+  const SWIPE_AXIS_RATIO = 1.5;
+  const MS_PER_DAY = 86400000;
+
   /* ===== بيانات الأذكار ===== */
   // النصوص والقوائم الأربعة في app/data.js المحمّل قبله؛ هذا الملف منطق فقط.
   const DATA = window.ADKAR_DATA;
@@ -146,6 +164,22 @@
   /** @returns {DayRecord} */
   const emptyDay = () => ({ morning: {}, evening: {}, wake: {}, sleep: {} });
 
+  // الحالة الفارغة تُستعمل كبديل آمن عند تعذّر القراءة أو فساد التخزين،
+  // وفيها لا شيء يُكتب فوق البيانات الأصلية.
+  /** @returns {ProgressState} */
+  function emptyState() {
+    return { schemaVersion: STATE_SCHEMA_VERSION, days: {}, stats: { bestStreak: 0 } };
+  }
+
+  /**
+   * نسخة عميقة من قيم قابلة للتسلسل في JSON (حالة التقدم ولقطاتها)،
+   * حتى لا تتشارك التعديلات اللاحقة كائنات مع النسخة المحفوظة.
+   * @template T
+   * @param {T} value
+   * @returns {T}
+   */
+  const deepCopy = (value) => JSON.parse(JSON.stringify(value));
+
   const addDays = (date, amount) => {
     const next = new Date(date);
     next.setDate(next.getDate() + amount);
@@ -167,7 +201,7 @@
   const dayDifference = (fromKey, toKey) => {
     const from = parseDateKey(fromKey);
     const to = parseDateKey(toKey);
-    return Math.round((to.getTime() - from.getTime()) / 86400000);
+    return Math.round((to.getTime() - from.getTime()) / MS_PER_DAY);
   };
 
   // اكتمال اليوم = إتمام الصباح والمساء معاً؛ الأقسام المكمّلة لا تدخل فيه.
@@ -295,7 +329,7 @@
         ? "المتصفح منع الوصول إلى التخزين المحلي. لن نحاول الكتابة حتى يصبح التخزين متاحاً."
         : "تعذّرت قراءة بيانات التقدم المخزنة. أوقفنا الحفظ التلقائي حتى لا تُستبدل البيانات التالفة.";
       storageBlocked = true;
-      return { schemaVersion: STATE_SCHEMA_VERSION, days: {}, stats: { bestStreak: 0 } };
+      return emptyState();
     }
   }
 
@@ -306,17 +340,17 @@
    */
   function parseLoadedState(raw) {
     try {
-      if (!raw) return { schemaVersion: STATE_SCHEMA_VERSION, days: {}, stats: { bestStreak: 0 } };
+      if (!raw) return emptyState();
       const parsed = JSON.parse(raw);
       if (!hasValidStoredShape(parsed)) {
         storageLoadIssue = "بيانات التقدم المخزنة تالفة أو غير متوافقة. أوقفنا الحفظ التلقائي حفاظاً عليها.";
         storageBlocked = true;
-        return { schemaVersion: STATE_SCHEMA_VERSION, days: {}, stats: { bestStreak: 0 } };
+        return emptyState();
       }
       if (Number(parsed.schemaVersion || 1) > STATE_SCHEMA_VERSION) {
         storageLoadIssue = "بيانات التقدم من إصدار أحدث. حدّث التطبيق قبل تعديلها حتى لا تفقد بياناتك.";
         storageBlocked = true;
-        return { schemaVersion: STATE_SCHEMA_VERSION, days: {}, stats: { bestStreak: 0 } };
+        return emptyState();
       }
       return { schemaVersion: STATE_SCHEMA_VERSION, days: sanitizeDays(parsed.days), stats: sanitizeStats(parsed.stats) };
     } catch (error) {
@@ -324,7 +358,7 @@
         ? "المتصفح منع الوصول إلى التخزين المحلي. لن نحاول الكتابة حتى يصبح التخزين متاحاً."
         : "تعذّرت قراءة بيانات التقدم المخزنة. أوقفنا الحفظ التلقائي حتى لا تُستبدل البيانات التالفة.";
       storageBlocked = true;
-      return { schemaVersion: STATE_SCHEMA_VERSION, days: {}, stats: { bestStreak: 0 } };
+      return emptyState();
     }
   }
 
@@ -346,7 +380,7 @@
     updateStreakStats();
     state.stats = sanitizeStats(state.stats);
     state.stats.bestStreak = Math.max(state.stats.bestStreak, getBestStreak());
-    return JSON.parse(JSON.stringify(state));
+    return deepCopy(state);
   }
 
   /** @returns {Promise<boolean>} */
@@ -359,7 +393,7 @@
     if (!ADKAR_STORAGE.isNative && !hasLocksSave) {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(localSnapshot));
-        lastPersistedState = JSON.parse(JSON.stringify(localSnapshot));
+        lastPersistedState = deepCopy(localSnapshot);
         reportStorageState(true);
         return true;
       } catch (error) {
@@ -369,11 +403,7 @@
     }
     // يجب التقاط قاعدة الدمج عند طلب القفل، لا عند تنفيذه؛ فقد تصل storage event
     // أثناء انتظار القفل وتحدّث lastPersistedState قبل دور هذه العملية.
-    const baseSnapshot = JSON.parse(JSON.stringify(lastPersistedState || {
-      schemaVersion: STATE_SCHEMA_VERSION,
-      days: {},
-      stats: { bestStreak: 0 },
-    }));
+    const baseSnapshot = deepCopy(lastPersistedState || emptyState());
 
     // Web Locks يجعل القراءة والدمج والكتابة عملية متسلسلة بين التبويبات.
     // من دونه لا توجد primitive ذرية في localStorage تضمن منع stale overwrite.
@@ -393,7 +423,7 @@
         updateStreakStats();
         state.stats.bestStreak = Math.max(state.stats.bestStreak, getBestStreak());
         await ADKAR_STORAGE.set(STORAGE_KEY, JSON.stringify(state));
-        lastPersistedState = JSON.parse(JSON.stringify(state));
+        lastPersistedState = deepCopy(state);
         reportStorageState(true);
       }).catch(() => {
         storageLoadIssue = "تعذّر حفظ التقدم داخل قفل المزامنة. بقي التقدم في الذاكرة ولم نكتب فوق البيانات.";
@@ -404,7 +434,7 @@
 
     try {
       await ADKAR_STORAGE.set(STORAGE_KEY, JSON.stringify(localSnapshot));
-      lastPersistedState = JSON.parse(JSON.stringify(localSnapshot));
+      lastPersistedState = deepCopy(localSnapshot);
       reportStorageState(true);
       return true;
     } catch (error) {
@@ -643,7 +673,7 @@
   let settings = loadSettings();
   let state = await loadState();
   // آخر نسخة نعرف أنها حُفظت؛ تُستخدم كقاعدة دمج داخل قفل الكتابة بين التبويبات.
-  let lastPersistedState = JSON.parse(JSON.stringify(state));
+  let lastPersistedState = deepCopy(state);
   let activePeriod = "morning";
   let renderedDay = dayKey();
   let itemControllers = new Map(); // مفتاح الذكر -> أدوات تحكم بطاقته
@@ -1470,7 +1500,7 @@
       elements.counterReset.textContent = "اضغط مرة أخرى للتأكيد";
       elements.counterReset.classList.add("is-confirming");
       clearTimeout(counterResetTimer);
-      counterResetTimer = setTimeout(disarmCounterReset, 4000);
+      counterResetTimer = setTimeout(disarmCounterReset, CONFIRM_WINDOW_MS);
       return;
     }
 
@@ -1588,7 +1618,7 @@
     clearTimeout(highlightTimer);
     highlightTimer = setTimeout(() => {
       controller.element.classList.remove("is-highlighted");
-    }, 2200);
+    }, HIGHLIGHT_MS);
   }
 
   /* ===== التراجع عن آخر إجراء ===== */
@@ -1606,7 +1636,7 @@
     elements.undoText.textContent = `${actionLabel}: ${title}`;
     elements.undoBar.hidden = false;
     clearTimeout(undoTimer);
-    undoTimer = setTimeout(hideUndo, 5000);
+    undoTimer = setTimeout(hideUndo, UNDO_VISIBLE_MS);
   }
 
   function hideUndo() {
@@ -1679,7 +1709,7 @@
       return;
     }
 
-    const days = Math.max(0, Math.floor((Date.now() - exportedAt) / 86400000));
+    const days = Math.max(0, Math.floor((Date.now() - exportedAt) / MS_PER_DAY));
     if (days >= BACKUP_REMINDER_DAYS) {
       elements.backupReminder.textContent =
         `آخر نسخة ${formatDayCount(days)} — يُنصح بتصدير نسخة جديدة.`;
@@ -1753,7 +1783,7 @@
     document.body.append(link);
     link.click();
     link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setTimeout(() => URL.revokeObjectURL(url), DOWNLOAD_URL_TTL_MS);
   }
 
   function exportBackup() {
@@ -1957,7 +1987,7 @@
    * @returns {ProgressState | null}
    */
   function parseStateSnapshot(raw) {
-    if (!raw) return { schemaVersion: STATE_SCHEMA_VERSION, days: {}, stats: { bestStreak: 0 } };
+    if (!raw) return emptyState();
     try {
       const parsed = JSON.parse(raw);
       if (!hasValidStoredShape(parsed) || Number(parsed.schemaVersion || 1) > STATE_SCHEMA_VERSION) return null;
@@ -2189,10 +2219,10 @@
       const elapsed = Date.now() - start.time;
       const selection = window.getSelection ? String(window.getSelection()) : "";
 
-      if (elapsed > 600) return;
-      if (Math.abs(dx) < 60) return;
-      if (Math.abs(dx) < Math.abs(dy) * 1.5) return;
-      if (start.x < 24 || start.x > window.innerWidth - 24) return;
+      if (elapsed > SWIPE_MAX_DURATION_MS) return;
+      if (Math.abs(dx) < SWIPE_MIN_DISTANCE_PX) return;
+      if (Math.abs(dx) < Math.abs(dy) * SWIPE_AXIS_RATIO) return;
+      if (start.x < SWIPE_EDGE_MARGIN_PX || start.x > window.innerWidth - SWIPE_EDGE_MARGIN_PX) return;
       if (selection.length > 0) return;
 
       const nextPeriod = dx < 0 ? "evening" : "morning";
@@ -2225,7 +2255,7 @@
     if (!elements.reset.classList.contains("is-confirming")) {
       elements.reset.classList.add("is-confirming");
       elements.reset.textContent = "اضغط مرة أخرى للتأكيد";
-      resetTimer = setTimeout(cancelReset, 4000);
+      resetTimer = setTimeout(cancelReset, CONFIRM_WINDOW_MS);
       return;
     }
 
@@ -2259,11 +2289,11 @@
 
   // فحص خفيف دوري: تغيّر اليوم كل دقيقة، والوقت المتبقي والثيم
   // المعتمد على الساعة كل 30 ثانية.
-  setInterval(checkDayChange, 60000);
+  setInterval(checkDayChange, DAY_CHECK_INTERVAL_MS);
   setInterval(() => {
     updateTimeLeft();
     refreshClockTheme();
-  }, 30000);
+  }, CLOCK_INTERVAL_MS);
 
   /* ===== المزامنة بين التبويبات ===== */
   // حدث storage يصل إلى كل التبويبات عدا الذي كتب؛ نعيد القراءة
@@ -2309,7 +2339,7 @@
       }
       const mergedState = mergeConcurrentState(baseState, state, remoteState);
       state = mergedState;
-      lastPersistedState = JSON.parse(JSON.stringify(remoteState));
+      lastPersistedState = deepCopy(remoteState);
       // saveState يعيد قراءة الحالة داخل القفل قبل الكتابة، فلا يعتمد على oldValue وحده.
       if (JSON.stringify(mergedState) !== JSON.stringify(remoteState)) saveState();
       reloadStateFromStorage(mergedState);
