@@ -192,9 +192,13 @@
 
   const startOfMonth = (date) => new Date(date.getFullYear(), date.getMonth(), 1);
 
-  // تحويل مفتاح YYYY-MM-DD إلى تاريخ محلي (الأشهر صفرية الأساس في Date).
-  const parseDateKey = (key) => {
-    const [year, month, day] = key.split("-").map(Number);
+  /**
+   * يحوّل مفتاح يوم (YYYY-MM-DD) إلى تاريخ محلي (الأشهر صفرية الأساس في Date).
+   * @param {string} dateKey
+   * @returns {Date}
+   */
+  const parseDateKey = (dateKey) => {
+    const [year, month, day] = dateKey.split("-").map(Number);
     return new Date(year, month - 1, day);
   };
 
@@ -205,8 +209,12 @@
   };
 
   // اكتمال اليوم = إتمام الصباح والمساء معاً؛ الأقسام المكمّلة لا تدخل فيه.
-  function isDayComplete(key) {
-    return isSectionComplete("morning", key) && isSectionComplete("evening", key);
+  /**
+   * @param {string} dateKey
+   * @returns {boolean}
+   */
+  function isDayComplete(dateKey) {
+    return isSectionComplete("morning", dateKey) && isSectionComplete("evening", dateKey);
   }
 
   /* ===== الحالة والتخزين ===== */
@@ -223,16 +231,16 @@
       const record = source[period];
       if (!record || typeof record !== "object" || Array.isArray(record)) return;
       SECTIONS[period].items.forEach((item, index) => {
-        const key = itemKey(period, item);
+        const entryKey = itemKey(period, item);
         // نقرأ المفتاح القديم أثناء الترحيل فقط، ثم نحفظ الهوية الجديدة.
-        const entry = record[key] || record[previousTitleKey(period, item)] || record[legacyItemKey(period, index)];
+        const entry = record[entryKey] || record[previousTitleKey(period, item)] || record[legacyItemKey(period, index)];
         if (!entry || typeof entry !== "object" || Array.isArray(entry)) return;
         if (item.count === 0) {
-          day[period][key] = { count: 0, done: Boolean(entry.done) };
+          day[period][entryKey] = { count: 0, done: Boolean(entry.done) };
           return;
         }
         const count = Math.max(0, Math.min(item.count, Math.floor(Number(entry.count) || 0)));
-        day[period][key] = { count, done: count >= item.count };
+        day[period][entryKey] = { count, done: count >= item.count };
       });
     });
     return day;
@@ -278,13 +286,13 @@
     const today = dayKey();
     const yesterday = dayKey(addDays(new Date(), -1));
     const candidates = Object.keys(rawDays)
-      .filter((key) => /^\d{4}-\d{2}-\d{2}$/.test(key) && isRealDateKey(key) && key <= today)
+      .filter((dateKey) => /^\d{4}-\d{2}-\d{2}$/.test(dateKey) && isRealDateKey(dateKey) && dateKey <= today)
       .sort()
       .slice(-(KEEP_DAYS + 1));
     const sanitized = /** @type {Record<string, DayRecord>} */ ({});
-    candidates.forEach((key) => {
-      const day = sanitizeDayRecord(rawDays[key]);
-      if (Object.keys(SECTIONS).some((period) => Object.keys(day[period]).length > 0)) sanitized[key] = day;
+    candidates.forEach((dateKey) => {
+      const day = sanitizeDayRecord(rawDays[dateKey]);
+      if (Object.keys(SECTIONS).some((period) => Object.keys(day[period]).length > 0)) sanitized[dateKey] = day;
     });
     // نحتفظ بيوم إضافي مؤقتاً إذا كان اليوم قيد الإنجاز والأمس مكتملاً؛
     // فهو ما يتيح حساب سلسلة حتى KEEP_DAYS + 1 من تفاصيل الأيام عند اكتمال اليوم.
@@ -293,8 +301,8 @@
       sanitized[yesterday] && isSanitizedDayComplete(sanitized[yesterday])
     );
     const selected = candidates.slice(-(KEEP_DAYS + (preserveStreakBridge ? 1 : 0)));
-    selected.forEach((key) => {
-      if (sanitized[key]) days[key] = sanitized[key];
+    selected.forEach((dateKey) => {
+      if (sanitized[dateKey]) days[dateKey] = sanitized[dateKey];
     });
     return days;
   }
@@ -457,11 +465,12 @@
   }
 
   /**
-   * @param {string} key
+   * يوم واحد من الحالة، بأقسامه الأربعة مضمونة.
+   * @param {string} dateKey
    * @returns {DayRecord}
    */
-  function getDay(key) {
-    const day = state.days[key];
+  function getDay(dateKey) {
+    const day = state.days[dateKey];
     if (!day || typeof day !== "object") return emptyDay();
     // نعيد نسخاً بأربعة أقسام مضمونة، فلا يكسر غياب قسماً القراءة لاحقاً.
     return {
@@ -473,27 +482,28 @@
   }
 
   /**
+   * إدخال ذكر واحد في يوم اليوم.
    * @param {string} period
-   * @param {string} key
+   * @param {string} entryKey
    * @returns {DayEntry | null}
    */
-  function getEntry(period, key) {
+  function getEntry(period, entryKey) {
     const day = state.days[dayKey()];
     const record = day && day[period];
-    return (record && record[key]) || null;
+    return (record && record[entryKey]) || null;
   }
 
   // يكتب إدخال ذكر معين في يوم اليوم ثم يحفظ فوراً (حتى لا يضيع
   // التقدم عند إغلاق الصفحة قبل أي حفظ لاحق).
   /**
    * @param {string} period
-   * @param {string} key
+   * @param {string} entryKey
    * @param {DayEntry} value
    */
-  function setEntry(period, key, value) {
+  function setEntry(period, entryKey, value) {
     const today = dayKey();
     const day = getDay(today);
-    day[period][key] = value;
+    day[period][entryKey] = value;
     state.days[today] = day;
     pruneDays();
     saveState();
@@ -512,11 +522,11 @@
 
   /**
    * @param {string} period
-   * @param {string} [key]
+   * @param {string} [dateKey]
    * @returns {number}
    */
-  function countCompleted(period, key = dayKey()) {
-    const record = getDay(key)[period];
+  function countCompleted(period, dateKey = dayKey()) {
+    const record = getDay(dateKey)[period];
     return SECTIONS[period].items.reduce(
       (total, item, index) =>
         isItemComplete(item, record[itemKey(period, item)]) ? total + 1 : total,
@@ -526,11 +536,11 @@
 
   /**
    * @param {string} period
-   * @param {string} key
+   * @param {string} dateKey
    * @returns {boolean}
    */
-  function isSectionComplete(period, key) {
-    return countCompleted(period, key) === SECTIONS[period].items.length;
+  function isSectionComplete(period, dateKey) {
+    return countCompleted(period, dateKey) === SECTIONS[period].items.length;
   }
 
   /**
@@ -958,20 +968,20 @@
    * @returns {HTMLLIElement}
    */
   function createItem(period, item, index) {
-    const key = itemKey(period, item);
-    const saved = getEntry(period, key);
+    const entryKey = itemKey(period, item);
+    const saved = getEntry(period, entryKey);
     const progress = {
       count: Number(saved && saved.count) || 0,
       done: Boolean(saved && saved.done),
     };
-    const nodes = buildItemCard(item, index, key);
+    const nodes = buildItemCard(item, index, entryKey);
 
     function paint() {
       paintItemCard(nodes, item, progress);
     }
 
     function persist() {
-      setEntry(period, key, { count: progress.count, done: progress.done });
+      setEntry(period, entryKey, { count: progress.count, done: progress.done });
     }
 
     function snapshot() {
@@ -992,7 +1002,7 @@
       persist();
       paint();
       showUndo(
-        key,
+        entryKey,
         item.title,
         before,
         isItemComplete(item, progress) ? "تم إكمال" : "تم تسجيل"
@@ -1013,7 +1023,7 @@
       persist();
       paint();
       updateProgress();
-      showUndo(key, item.title, before, "أُعيد تعيين");
+      showUndo(entryKey, item.title, before, "أُعيد تعيين");
       announce(`أُعيد تعيين: ${item.title}`);
       return true;
     }
@@ -1022,7 +1032,7 @@
     nodes.undo.addEventListener("click", resetProgress);
 
     paint();
-    itemControllers.set(key, {
+    itemControllers.set(entryKey, {
       element: nodes.card,
       item,
       period,
@@ -1243,14 +1253,14 @@
   // أفضل سلسلة: نمرّ على أيام التخزين المرتبة ونعيد أبعد امتداد
   // متتالٍ (فرق يوم واحد بين يومَين مكتملَين)؛ أي يوم ناقص يبدأ عدّاً جديداً.
   function getBestStreak() {
-    const keys = Object.keys(state.days).sort();
+    const dateKeys = Object.keys(state.days).sort();
     let best = 0;
     let run = 0;
     let previous = null;
-    keys.forEach((key) => {
-      if (!isDayComplete(key)) { run = 0; previous = key; return; }
-      run = previous && dayDifference(previous, key) === 1 ? run + 1 : 1;
-      previous = key;
+    dateKeys.forEach((dateKey) => {
+      if (!isDayComplete(dateKey)) { run = 0; previous = dateKey; return; }
+      run = previous && dayDifference(previous, dateKey) === 1 ? run + 1 : 1;
+      previous = dateKey;
       best = Math.max(best, run);
     });
     return Math.max(best, sanitizeStats(state.stats).bestStreak);
@@ -1295,22 +1305,22 @@
   }
 
   function renderCalendarDetail() {
-    const key = selectedCalendarKey;
-    if (!key) {
+    const dateKey = selectedCalendarKey;
+    if (!dateKey) {
       elements.calendarDetail.textContent = "";
       return;
     }
-    const date = parseDateKey(key);
-    if (key > dayKey()) {
+    const date = parseDateKey(dateKey);
+    if (dateKey > dayKey()) {
       elements.calendarDetail.textContent = "";
       return;
     }
-    if (!state.days[key]) {
+    if (!state.days[dateKey]) {
       elements.calendarDetail.textContent =
         `${formatWeekday(date)} ${toArabicNumber(date.getDate())} ${formatMonthLabel(date)} — لا يوجد تقدم مسجل.`;
       return;
     }
-    const counts = countAllSections(key);
+    const counts = countAllSections(dateKey);
     elements.calendarDetail.textContent =
       `${formatWeekday(date)} ${toArabicNumber(date.getDate())} ${formatMonthLabel(date)} — ` +
       `الصباح ${toArabicNumber(counts.morning)}/${toArabicNumber(SECTIONS.morning.items.length)}، ` +
@@ -1345,9 +1355,9 @@
    * @returns {HTMLButtonElement}
    */
   function buildCalendarCell(date, todayKey) {
-    const key = dayKey(date);
-    const isFuture = key > todayKey;
-    const completed = completionSnapshot(key);
+    const dateKey = dayKey(date);
+    const isFuture = dateKey > todayKey;
+    const completed = completionSnapshot(dateKey);
     const bothDone = completed.morning && completed.evening;
     const partial = (completed.morning || completed.evening) && !bothDone;
 
@@ -1355,14 +1365,14 @@
     cell.type = "button";
     cell.className = "calendar-day";
     if (isFuture) cell.classList.add("is-future");
-    if (key === todayKey) cell.classList.add("is-today");
-    if (key === selectedCalendarKey) cell.classList.add("is-selected");
+    if (dateKey === todayKey) cell.classList.add("is-today");
+    if (dateKey === selectedCalendarKey) cell.classList.add("is-selected");
     if (bothDone) cell.classList.add("is-complete");
     else if (partial) cell.classList.add("is-partial");
-    cell.dataset.key = key;
+    cell.dataset.key = dateKey;
     cell.disabled = isFuture;
     cell.setAttribute("aria-label", calendarDayLabel(date, completed, isFuture));
-    cell.setAttribute("aria-pressed", String(key === selectedCalendarKey));
+    cell.setAttribute("aria-pressed", String(dateKey === selectedCalendarKey));
 
     const number = document.createElement("span");
     number.textContent = toArabicNumber(date.getDate());
@@ -1376,7 +1386,7 @@
     );
 
     cell.append(number, dots);
-    cell.addEventListener("click", () => selectCalendarDay(key));
+    cell.addEventListener("click", () => selectCalendarDay(dateKey));
     return cell;
   }
 
@@ -1486,7 +1496,7 @@
     if (!controller) return;
     const progress = controller.getProgress();
     const item = controller.item;
-    const complete = progress.count >= item.count;
+    const complete = isItemComplete(item, progress);
 
     elements.counterCount.textContent =
       `${toArabicNumber(progress.count)} من ${toArabicNumber(item.count)}`;
@@ -1511,11 +1521,16 @@
 
   // فتح نافذة العدّاد لذكر معين: نسخ نصه إليها، تثبيت من فتحها
   // لإعادة التركيز إليه لاحقاً، ثم إظهارها بـ <dialog> إن توفر.
-  function openCounter(key, opener) {
-    const controller = itemControllers.get(key);
+  /**
+   * @param {string} entryKey
+   * @param {HTMLElement} opener
+   * @returns {void}
+   */
+  function openCounter(entryKey, opener) {
+    const controller = itemControllers.get(entryKey);
     if (!controller || !elements.counterDialog || elements.counterDialog.open) return;
 
-    counterKey = key;
+    counterKey = entryKey;
     counterOpener = opener;
     elements.counterTitle.textContent = controller.item.title;
     elements.counterText.replaceChildren();
@@ -1726,14 +1741,14 @@
   // شريط التراجع يحتفظ بنسخة «قبل» من الإدخال؛ إن لم يُلغَ خلال
   // 5 ثوانٍ يختفي ويُنسى الإجراء.
   /**
-   * @param {string} key
+   * @param {string} entryKey
    * @param {string} title
    * @param {DayEntry} before
    * @param {string} actionLabel
    * @returns {void}
    */
-  function showUndo(key, title, before, actionLabel) {
-    lastAction = { key, title, before };
+  function showUndo(entryKey, title, before, actionLabel) {
+    lastAction = { entryKey, title, before };
     elements.undoText.textContent = `${actionLabel}: ${title}`;
     elements.undoBar.hidden = false;
     clearTimeout(undoTimer);
@@ -1751,7 +1766,7 @@
     if (!lastAction) return;
 
     const action = lastAction;
-    const controller = itemControllers.get(action.key);
+    const controller = itemControllers.get(action.entryKey);
     hideUndo();
     if (!controller) return;
 
@@ -1823,17 +1838,25 @@
 
   // التحقق من أن التاريخ حقيقي فعلاً: "2026-02-30" يطابق النمط لكن
   // Date يلفه إلى مارس، فنقارن المكونات بعد الإنشاء لتكتشف هذا.
-  function isRealDateKey(key) {
-    const [year, month, day] = key.split("-").map(Number);
+  /**
+   * @param {string} dateKey
+   * @returns {boolean}
+   */
+  function isRealDateKey(dateKey) {
+    const [year, month, day] = dateKey.split("-").map(Number);
     const date = new Date(year, month - 1, day);
     return (
       date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day
     );
   }
 
-  function formatBackupDate(key) {
-    const [year, month, day] = key.split("-").map(Number);
-    if (!formatters.backupDate) return key;
+  /**
+   * @param {string} dateKey
+   * @returns {string}
+   */
+  function formatBackupDate(dateKey) {
+    if (!formatters.backupDate) return dateKey;
+    const [year, month, day] = dateKey.split("-").map(Number);
     return formatters.backupDate.format(new Date(year, month - 1, day));
   }
 
@@ -1926,8 +1949,8 @@
   }
 
   function exportCsv() {
-    const keys = Object.keys(state.days).sort();
-    if (keys.length === 0) {
+    const dateKeys = Object.keys(state.days).sort();
+    if (dateKeys.length === 0) {
       setBackupStatus("لا توجد بيانات لتصديرها بعد.", true);
       return;
     }
@@ -1945,11 +1968,11 @@
       ],
     ];
 
-    keys.forEach((key) => {
-      const counts = countAllSections(key);
-      const completed = completionSnapshot(key);
+    dateKeys.forEach((dateKey) => {
+      const counts = countAllSections(dateKey);
+      const completed = completionSnapshot(dateKey);
       rows.push([
-        key,
+        dateKey,
         completed.morning ? "نعم" : "لا",
         `${counts.morning}/${SECTIONS.morning.items.length}`,
         `${counts.wake}/${SECTIONS.wake.items.length}`,
@@ -1965,7 +1988,7 @@
       "\uFEFF" + rows.map((row) => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
 
     downloadFile(csv, `adkar-${dayKey()}.csv`, "text/csv;charset=utf-8");
-    setBackupStatus(`تم تصدير ${formatDayTotal(keys.length)} إلى CSV.`);
+    setBackupStatus(`تم تصدير ${formatDayTotal(dateKeys.length)} إلى CSV.`);
   }
 
   /* ===== النسخ الاحتياطي: قراءة ملف الاستيراد ومعاينته قبل الدمج أو الاستبدال ===== */
@@ -2051,9 +2074,9 @@
       const importedRecord = importedDay[period] || {};
 
       SECTIONS[period].items.forEach((item, index) => {
-        const key = itemKey(period, item);
-        const entry = mergeItemEntry(item, currentRecord[key], importedRecord[key]);
-        if (entry) merged[period][key] = entry;
+        const entryKey = itemKey(period, item);
+        const entry = mergeItemEntry(item, currentRecord[entryKey], importedRecord[entryKey]);
+        if (entry) merged[period][entryKey] = entry;
       });
     });
 
@@ -2068,10 +2091,10 @@
   function mergeDays(currentDays, importedDays) {
     const merged = { ...currentDays };
 
-    Object.keys(importedDays).forEach((key) => {
-      merged[key] = currentDays[key]
-        ? mergeDayRecords(currentDays[key], importedDays[key])
-        : importedDays[key];
+    Object.keys(importedDays).forEach((dateKey) => {
+      merged[dateKey] = currentDays[dateKey]
+        ? mergeDayRecords(currentDays[dateKey], importedDays[dateKey])
+        : importedDays[dateKey];
     });
 
     return merged;
@@ -2113,14 +2136,14 @@
         const localRecord = (localDays[dayKeyValue] && localDays[dayKeyValue][period]) || {};
         const remoteRecord = (remoteDays[dayKeyValue] && remoteDays[dayKeyValue][period]) || {};
         SECTIONS[period].items.forEach((item) => {
-          const key = itemKey(period, item);
-          const baseEntry = baseRecord[key] || null;
-          const localEntry = localRecord[key] || null;
-          const remoteEntry = remoteRecord[key] || null;
+          const entryKey = itemKey(period, item);
+          const baseEntry = baseRecord[entryKey] || null;
+          const localEntry = localRecord[entryKey] || null;
+          const remoteEntry = remoteRecord[entryKey] || null;
           const localChanged = JSON.stringify(localEntry) !== JSON.stringify(baseEntry);
           const remoteChanged = JSON.stringify(remoteEntry) !== JSON.stringify(baseEntry);
           const chosen = localChanged && !remoteChanged ? localEntry : remoteEntry;
-          if (chosen) mergedDay[period][key] = chosen;
+          if (chosen) mergedDay[period][entryKey] = chosen;
         });
       });
       if (Object.keys(SECTIONS).some((period) => Object.keys(mergedDay[period]).length)) {
@@ -2177,7 +2200,7 @@
     if (!pendingImport) return;
 
     const imported = pendingImport;
-    const addedDays = Object.keys(imported.days).filter((key) => !state.days[key]).length;
+    const addedDays = Object.keys(imported.days).filter((dateKey) => !state.days[dateKey]).length;
 
     // الدمج الصريح يسمح بالاسترداد من نسخة سليمة إذا كان التخزين السابق تالفاً.
     storageBlocked = false;
