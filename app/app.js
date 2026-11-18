@@ -521,6 +521,13 @@
   }
 
   /**
+   * هل سُجّل أي تقدم لهذا الذكر (عدّ أو إتمام)؟ يحدد ظهور زر «إعادة».
+   * @param {DayEntry} entry
+   * @returns {boolean}
+   */
+  const hasProgress = (entry) => entry.count > 0 || entry.done;
+
+  /**
    * @param {string} period
    * @param {string} [dateKey]
    * @returns {number}
@@ -953,7 +960,7 @@
     if (item.count <= 1) {
       nodes.pill.setAttribute("aria-pressed", String(complete));
     }
-    nodes.undo.hidden = progress.count === 0 && !progress.done;
+    nodes.undo.hidden = !hasProgress(progress);
   }
 
   /* بناء بطاقة ذكر واحدة وإرجاعها.
@@ -1016,7 +1023,7 @@
     }
 
     function resetProgress() {
-      if (progress.count === 0 && !progress.done) return false;
+      if (!hasProgress(progress)) return false;
       const before = snapshot();
       progress.count = 0;
       progress.done = false;
@@ -1465,10 +1472,20 @@
     announce(message);
   }
 
+  // هل توجد نافذة عدّاد معروضة الآن؟ نتحقق من الخاصية open ومن السمة معاً
+  // لأن المتصفحات التي لا تدعم <dialog> تعرضها بالسمة وحدها.
+  /**
+   * @returns {boolean}
+   */
+  function isCounterOpen() {
+    const dialog = elements.counterDialog;
+    return Boolean(dialog && (dialog.open === true || dialog.hasAttribute("open")));
+  }
+
   function celebrate(section) {
     // إن كانت نافذة العدّاد مفتوحة نؤجل الاحتفال إلى الإغلاق،
     // حتى لا تختفي الحركة خلف التعتيم دون أن يراها المستخدم.
-    if (elements.counterDialog && elements.counterDialog.open) {
+    if (isCounterOpen()) {
       pendingCelebration = section;
       return;
     }
@@ -1476,7 +1493,7 @@
   }
 
   function celebrateSupplement(supplement) {
-    if (elements.counterDialog && elements.counterDialog.open) {
+    if (isCounterOpen()) {
       pendingSupplementCelebration = supplement;
       return;
     }
@@ -1505,7 +1522,7 @@
       : "0%";
     elements.counterButton.textContent = complete ? "تم ✓" : "عدّ";
     elements.counterButton.disabled = complete;
-    elements.counterReset.disabled = progress.count === 0 && !progress.done;
+    elements.counterReset.disabled = !hasProgress(progress);
     if (elements.counterReset.disabled) disarmCounterReset();
   }
 
@@ -1528,7 +1545,7 @@
    */
   function openCounter(entryKey, opener) {
     const controller = itemControllers.get(entryKey);
-    if (!controller || !elements.counterDialog || elements.counterDialog.open) return;
+    if (!controller || !elements.counterDialog || isCounterOpen()) return;
 
     counterKey = entryKey;
     counterOpener = opener;
@@ -1577,8 +1594,7 @@
       pendingSupplementCelebration = null;
     }
     const dialog = elements.counterDialog;
-    const isOpen = dialog && (dialog.open === true || dialog.hasAttribute("open"));
-    if (!isOpen) return;
+    if (!dialog || !isCounterOpen()) return;
 
     if (typeof dialog.close === "function") {
       dialog.close();
