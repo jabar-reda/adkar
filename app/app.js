@@ -1,2520 +1,393 @@
 // @ts-check
 /* ==========================================================================
-   منطق تطبيق «أذكار الصباح والمساء».
-   تسلسل الملف: الثوابت، فبيانات الأذكار (نصوصها في app/data.js)، فالأدوات
-   المساعدة، فالحالة والتخزين، فالإعدادات، فبناء الواجهة وتحديثها، فالإحصاءات
-   (السلسلة والتقويم)، فالعدّاد الكبير، فالنسخ الاحتياطي، وأخيراً ربط
-   الأحداث وبدء التشغيل.
-   كل التقدم يُحفظ عبر طبقة app/storage.js (localStorage على الويب، Capacitor
-   Preferences داخل APK) والصفحة تعمل دون أي اتصال شبكي.
+   نقطة دخول التطبيق (ES module): تجمع وحدات app/modules/ وتربط أحداث
+   الصفحة وتبدأ التشغيل. منطق كل ميزة في وحدته: الثوابت، الأدوات، DOM،
+   الحالة والتخزين، التقدم، الإعدادات، الوقت، البطاقات، عرض القسم،
+   الإحصاءات، العدّاد، التراجع، والنسخ الاحتياطي.
+   التحميل عبر <script type="module">، وملفات config/storage/data تبقى
+   سكربتات كلاسيكية تعرّف قيمها على window قبل تنفيذ هذه الوحدة.
    ========================================================================== */
-(async function () {
-  "use strict";
 
-  /* ===== الثوابت ===== */
-  // تُعرّف القيم المشتركة مع theme-init.js في config.js المحمّل قبل هذا الملف.
-  const CONFIG = window.ADKAR_CONFIG;
-  if (!CONFIG) throw new Error("config.js must load before app.js");
+import {
+  CLOCK_INTERVAL_MS,
+  CONFIRM_WINDOW_MS,
+  DAY_CHECK_INTERVAL_MS,
+  HIGHLIGHT_MS,
+  SECTIONS,
+  SETTINGS_KEY,
+  STORAGE_KEY,
+  SWIPE_AXIS_RATIO,
+  SWIPE_EDGE_MARGIN_PX,
+  SWIPE_MAX_DURATION_MS,
+  SWIPE_MIN_DISTANCE_PX,
+} from "./modules/constants.js";
+import {
+  applyImport,
+  applyMerge,
+  cancelImport,
+  exportBackup,
+  exportCsv,
+  handleImportFile,
+  updateBackupReminder,
+} from "./modules/backup.js";
+import { announce, elements } from "./modules/dom.js";
+import {
+  getCalendarMonth,
+  renderCalendar,
+  resetCalendarToCurrentMonth,
+  setCalendarMonth,
+  setSelectedCalendarKey,
+} from "./modules/insights.js";
+import { renderPeriod, updateProgress } from "./modules/period.js";
+import { isItemComplete } from "./modules/progress.js";
+import {
+  applyFontSize,
+  applySettingsToUi,
+  applyTheme,
+  refreshClockTheme,
+  reloadSettings,
+  saveSettings,
+  settings,
+  syncSettingsUI,
+} from "./modules/settings.js";
+import {
+  getDay,
+  getLastPersistedState,
+  isStorageBlocked,
+  loadState,
+  mergeConcurrentState,
+  parseStateSnapshot,
+  reportStorageState,
+  saveState,
+  setLastPersistedState,
+  setState,
+  state,
+  unblockStorage,
+} from "./modules/state.js";
+import {
+  detectPeriod,
+  updateDates,
+  updateTimeLeft,
+} from "./modules/time.js";
+import { getLastAction, hideUndo } from "./modules/undo.js";
+import { getActivePeriod, itemControllers } from "./modules/ui-state.js";
+import {
+  addMonths,
+  dayKey,
+  itemKey,
+  startOfMonth,
+} from "./modules/utils.js";
 
-  const STORAGE_KEY = CONFIG.storageKeys.state;
-  const SETTINGS_KEY = CONFIG.storageKeys.settings;
-  // نحتفظ بآخر 60 يوماً من التقدم فقط حتى لا يتضخم التخزين بلا نهاية.
-  const KEEP_DAYS = 60;
-  const STATE_SCHEMA_VERSION = 2;
-  // حد حجم ملف النسخة الاحتياطية المقبول عند الاستيراد (2 ميغابايت).
-  const MAX_BACKUP_BYTES = 2 * 1024 * 1024;
-  // نذكّر المستخدم بتصدير نسخة احتياطية كل أسبوعين.
-  const BACKUP_REMINDER_DAYS = 14;
-  const ARABIC_DIGITS = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
-  const FONT_SIZES = CONFIG.fontSizes;
-  const THEMES = CONFIG.themes;
-  const DEFAULT_SETTINGS = { fontSize: "medium", theme: "auto", lastExportAt: null };
-  const PERIOD_WINDOWS = CONFIG.periodWindows;
+let renderedDay = dayKey();
+let highlightTimer = null;
+let resetTimer = null;
+let touchStart = null;
 
-  // مهل الواجهة بالمللي ثانية: مدة الاحتفال، إبراز «التالي»، بقاء شريط التراجع،
-  // ومهلة تأكيد «اضغط مرة أخرى».
-  const CELEBRATION_MS = 1200;
-  const HIGHLIGHT_MS = 2200;
-  const UNDO_VISIBLE_MS = 5000;
-  const CONFIRM_WINDOW_MS = 4000;
-  // مدة بقاء رابط التنزيل المؤقت قبل تحريره.
-  const DOWNLOAD_URL_TTL_MS = 1000;
-  // فحص تغيّر اليوم كل دقيقة، وتحديث الوقت والثيم المعتمد على الساعة كل نصف دقيقة.
-  const DAY_CHECK_INTERVAL_MS = 60000;
-  const CLOCK_INTERVAL_MS = 30000;
-  // حدود السحب الأفقي بين القسمين.
-  const SWIPE_MIN_DISTANCE_PX = 60;
-  const SWIPE_MAX_DURATION_MS = 600;
-  const SWIPE_EDGE_MARGIN_PX = 24;
-  const SWIPE_AXIS_RATIO = 1.5;
-  const MS_PER_DAY = 86400000;
+/* ===== الانتقال إلى أول ذكر غير مكتمل ===== */
+// التمرير السلس إلى أول ذكر ناقص مع إبرازه وإعطاء زر تسجيله
+// التركيز؛ من طلب تقليل الحركة يُمرَّر فوراً بلا سلاسة.
+function goToNextIncomplete() {
+  const period = getActivePeriod();
+  const section = SECTIONS[period];
+  const record = getDay(dayKey())[period];
+  const index = section.items.findIndex(
+    (item) => !isItemComplete(item, record[itemKey(period, item)])
+  );
+  if (index === -1) return;
 
-  /* ===== بيانات الأذكار ===== */
-  // النصوص والقوائم الأربعة في app/data.js المحمّل قبله؛ هذا الملف منطق فقط.
-  const DATA = window.ADKAR_DATA;
-  if (!DATA) throw new Error("app/data.js must load before app.js");
-  const { MORNING_ITEMS, WAKE_ITEMS, EVENING_ITEMS, SLEEP_ITEMS } = DATA;
+  const controller = itemControllers.get(itemKey(period, section.items[index]));
+  if (!controller) return;
 
-  // الأقسام الأربعة: الأساسيان (صباح/مساء) يحدّان اكتمال اليوم،
-  // والمكمّلان (استيقاظ/نوم) يظهرمان داخل قسما الأساس دون دخولهما فيه.
-  const SECTIONS = {
-    morning: {
-      name: "أذكار الصباح",
-      hint:
-        "من بعد صلاة الفجر إلى طلوع الشمس، ويجوز الإتيان بها بعد ذلك عند فوات وقتها.",
-      items: MORNING_ITEMS,
-    },
-    evening: {
-      name: "أذكار المساء",
-      hint:
-        "من بعد صلاة العصر إلى غروب الشمس، ويجوز الإتيان بها في أول الليل عند فوات ذلك.",
-      items: EVENING_ITEMS,
-    },
-    wake: {
-      name: "أذكار الاستيقاظ",
-      hint:
-        "تُقال عند الاستيقاظ من النوم، وهي مكمّلة لأذكار الصباح ولا تُحتسب في اكتمالها.",
-      items: WAKE_ITEMS,
-    },
-    sleep: {
-      name: "أذكار النوم",
-      hint:
-        "تُقال عند الفراش مباشرة، وهي مكمّلة لأذكار المساء ولا تُحتسب في اكتمالها.",
-      items: SLEEP_ITEMS,
-    },
-  };
+  const reduceMotion =
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  /* ===== المجموعات المكمّلة لكل قسم ===== */
-  const SUPPLEMENTS = {
-    morning: {
-      period: "wake",
-      name: "أذكار الاستيقاظ",
-      note:
-        "تُقال عند الاستيقاظ من النوم، وهي مكمّلة لأذكار الصباح ولا تُحتسب في اكتمالها.",
-    },
-    evening: {
-      period: "sleep",
-      name: "أذكار النوم",
-      note:
-        "تُقال عند الفراش مباشرة، وهي مكمّلة لأذكار المساء ولا تُحتسب في اكتمالها. آية الكرسي والمعوذات مذكورة في أول أذكار المساء.",
-    },
-  };
+  controller.element.scrollIntoView({
+    behavior: reduceMotion ? "auto" : "smooth",
+    block: "center",
+  });
+  controller.element.classList.add("is-highlighted");
+  controller.focusPill();
 
-  /* ===== أدوات مساعدة ===== */
-  // تحويل الأرقام اللاتينية إلى مشرقية حتى يظهر كل العدّ بالعربية.
-  const toArabicNumber = (value) =>
-    String(value).replace(/\d/g, (digit) => ARABIC_DIGITS[Number(digit)]);
+  clearTimeout(highlightTimer);
+  highlightTimer = setTimeout(() => {
+    controller.element.classList.remove("is-highlighted");
+  }, HIGHLIGHT_MS);
+}
 
-  const pad2 = (value) => String(value).padStart(2, "0");
+/* ===== التراجع عن آخر إجراء ===== */
+// الشريط نفسه في وحدة التراجع؛ هنا نطبّق النسخة «قبل» على الذكر.
+function performUndo() {
+  const action = getLastAction();
+  if (!action) return;
 
-  // مفتاح اليوم بصيغة YYYY-MM-DD بتوقيت الجهاز المحلي، وهو شكل مفاتيح التخزين.
-  const dayKey = (date = new Date()) =>
-    `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+  const controller = itemControllers.get(action.entryKey);
+  hideUndo();
+  if (!controller) return;
 
-  // الهوية الصريحة لا تعتمد على العنوان أو موضع الذكر؛ غيّرها فقط عند إضافة ذكر جديد.
-  const stableItemId = (item) => item.id;
-  const itemKey = (period, item) => period + "-" + stableItemId(item);
-  // مفاتيح الإصدارات السابقة تُقرأ مرة واحدة ثم تُحفظ بالهوية الصريحة.
-  function previousTitleKey(period, item) {
-    const source = String(item.title || "untitled").normalize("NFKC").trim();
-    let hash = 2166136261;
-    for (let index = 0; index < source.length; index += 1) {
-      hash ^= source.charCodeAt(index);
-      hash = Math.imul(hash, 16777619);
-    }
-    return period + "-" + (hash >>> 0).toString(36);
-  }
-  const legacyItemKey = (period, index) => period + "-" + index;
-  /**
-   * يطهّر إحصاءات السلسلة من أي مصدر ويعيدها بأرقام صالحة.
-   * @param {any} raw
-   * @returns {StreakStats}
-   */
-  const sanitizeStats = (raw) => {
-    const best = Number(raw && raw.bestStreak);
-    const current = Number(raw && raw.currentStreak);
-    const date = raw && typeof raw.currentStreakDate === "string" &&
-      /^\d{4}-\d{2}-\d{2}$/.test(raw.currentStreakDate) &&
-      isRealDateKey(raw.currentStreakDate) && raw.currentStreakDate <= dayKey()
-      ? raw.currentStreakDate
-      : null;
-    return {
-      bestStreak: Number.isFinite(best) ? Math.max(0, Math.floor(best)) : 0,
-      currentStreak: date && Number.isFinite(current) ? Math.max(0, Math.floor(current)) : 0,
-      currentStreakDate: date,
-    };
-  };
+  controller.applyProgress(action.before);
+  updateProgress();
+  announce(`تم التراجع عن: ${action.title}`);
+}
 
-  /**
-   * يدمج إحصاءات عدة نسخ بأخذ أفضل سلسلة وأحدث سلسلة حالية.
-   * @param {...any} sources
-   * @returns {StreakStats}
-   */
-  function mergeStats(...sources) {
-    const values = sources.map(sanitizeStats);
-    const bestStreak = Math.max(0, ...values.map((value) => value.bestStreak));
-    const latestDate = values.map((value) => value.currentStreakDate).filter(Boolean).sort().slice(-1)[0] || null;
-    const currentStreak = latestDate
-      ? Math.max(0, ...values.filter((value) => value.currentStreakDate === latestDate).map((value) => value.currentStreak))
-      : 0;
-    return { bestStreak, currentStreak, currentStreakDate: latestDate };
-  }
+/* ===== التبويبات ===== */
+elements.tablist.addEventListener("click", (event) => {
+  const tab = /** @type {HTMLElement | null} */ (
+    /** @type {Element} */ (event.target).closest(".tab")
+  );
+  if (!tab) return;
+  renderPeriod(tab.dataset.period);
+});
 
-  // بنية يوم فارغ لكل الأقسام الأربعة، تُستخدم كأساس آمن للقراءة والكتابة.
-  /** @returns {DayRecord} */
-  const emptyDay = () => ({ morning: {}, evening: {}, wake: {}, sleep: {} });
+// التنقل بلوحة المفاتيح على نمط WAI-ARIA: الأسهم والمنزل والنهاية
+// في اتجاه RTL — ArrowLeft يتقدم لأن الصفحة من اليمين إلى اليسار.
+elements.tablist.addEventListener("keydown", (event) => {
+  const order = ["morning", "evening"];
+  const activePeriod = getActivePeriod();
+  const current = order.indexOf(activePeriod);
+  let next = current;
 
-  // الحالة الفارغة تُستعمل كبديل آمن عند تعذّر القراءة أو فساد التخزين،
-  // وفيها لا شيء يُكتب فوق البيانات الأصلية.
-  /** @returns {ProgressState} */
-  function emptyState() {
-    return { schemaVersion: STATE_SCHEMA_VERSION, days: {}, stats: { bestStreak: 0 } };
-  }
+  if (event.key === "ArrowLeft") next = (current + 1) % order.length;
+  else if (event.key === "ArrowRight") next = (current - 1 + order.length) % order.length;
+  else if (event.key === "Home") next = 0;
+  else if (event.key === "End") next = order.length - 1;
+  else return;
 
-  /**
-   * نسخة عميقة من قيم قابلة للتسلسل في JSON (حالة التقدم ولقطاتها)،
-   * حتى لا تتشارك التعديلات اللاحقة كائنات مع النسخة المحفوظة.
-   * @template T
-   * @param {T} value
-   * @returns {T}
-   */
-  const deepCopy = (value) => JSON.parse(JSON.stringify(value));
+  event.preventDefault();
+  renderPeriod(order[next]);
+  const nextTab = elements.tabs.find((tab) => tab.dataset.period === order[next]);
+  if (nextTab) nextTab.focus();
+});
 
-  const addDays = (date, amount) => {
-    const next = new Date(date);
-    next.setDate(next.getDate() + amount);
-    return next;
-  };
-
-  // إضافة أشهر عبر اليوم 1 حتى لا تنزلق القيمة عند أشهر 30/31 يوماً.
-  const addMonths = (date, amount) =>
-    new Date(date.getFullYear(), date.getMonth() + amount, 1);
-
-  const startOfMonth = (date) => new Date(date.getFullYear(), date.getMonth(), 1);
-
-  /**
-   * يحوّل مفتاح يوم (YYYY-MM-DD) إلى تاريخ محلي (الأشهر صفرية الأساس في Date).
-   * @param {string} dateKey
-   * @returns {Date}
-   */
-  const parseDateKey = (dateKey) => {
-    const [year, month, day] = dateKey.split("-").map(Number);
-    return new Date(year, month - 1, day);
-  };
-
-  const dayDifference = (fromKey, toKey) => {
-    const from = parseDateKey(fromKey);
-    const to = parseDateKey(toKey);
-    return Math.round((to.getTime() - from.getTime()) / MS_PER_DAY);
-  };
-
-  // اكتمال اليوم = إتمام الصباح والمساء معاً؛ الأقسام المكمّلة لا تدخل فيه.
-  /**
-   * @param {string} dateKey
-   * @returns {boolean}
-   */
-  function isDayComplete(dateKey) {
-    return isSectionComplete("morning", dateKey) && isSectionComplete("evening", dateKey);
-  }
-
-  /* ===== الحالة والتخزين ===== */
-  /**
-   * يبني نسخة نظيفة آمنة من بيانات يوم واحد: يتجاهل المفاتيح المجهولة،
-   * ويقصّ كل عدّ داخل حدود العدد المطلوب، فلا تفسد بيانات خارجية الواجهة.
-   * @param {any} source
-   * @returns {DayRecord}
-   */
-  function sanitizeDayRecord(source) {
-    const day = emptyDay();
-    if (!source || typeof source !== "object" || Array.isArray(source)) return day;
-    Object.keys(SECTIONS).forEach((period) => {
-      const record = source[period];
-      if (!record || typeof record !== "object" || Array.isArray(record)) return;
-      SECTIONS[period].items.forEach((item, index) => {
-        const entryKey = itemKey(period, item);
-        // نقرأ المفتاح القديم أثناء الترحيل فقط، ثم نحفظ الهوية الجديدة.
-        const entry = record[entryKey] || record[previousTitleKey(period, item)] || record[legacyItemKey(period, index)];
-        if (!entry || typeof entry !== "object" || Array.isArray(entry)) return;
-        if (item.count === 0) {
-          day[period][entryKey] = { count: 0, done: Boolean(entry.done) };
-          return;
-        }
-        const count = Math.max(0, Math.min(item.count, Math.floor(Number(entry.count) || 0)));
-        day[period][entryKey] = { count, done: count >= item.count };
-      });
-    });
-    return day;
-  }
-
-  // يرشّح مفاتيح الأيام: تاريخ حقيقي بصيغة صحيحة لا لاحق لليوم،
-  // ويبقي أحدث KEEP_DAYS يوماً فقط، ويحذف الأيام الفارغة تماماً.
-  function hasValidStoredShape(parsed) {
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) ||
-        !parsed.days || typeof parsed.days !== "object" || Array.isArray(parsed.days)) return false;
-    for (const [date, day] of Object.entries(parsed.days)) {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !isRealDateKey(date)) return false;
-      if (!day || typeof day !== "object" || Array.isArray(day)) return false;
-      for (const period of Object.keys(SECTIONS)) {
-        if (day[period] === undefined) continue;
-        const record = day[period];
-        if (!record || typeof record !== "object" || Array.isArray(record)) return false;
-        for (const entry of Object.values(record)) {
-          if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
-          if (entry.count !== undefined && (!Number.isFinite(Number(entry.count)) || Number(entry.count) < 0)) return false;
-          if (entry.done !== undefined && typeof entry.done !== "boolean") return false;
-        }
-      }
-    }
-    return true;
-  }
-
-  function isSanitizedDayComplete(day) {
-    return ["morning", "evening"].every((period) =>
-      SECTIONS[period].items.every((item) => isItemComplete(item, day[period][itemKey(period, item)]))
-    );
-  }
-
-  /**
-   * يرشّح مفاتيح الأيام ويبقي أحدث KEEP_DAYS يوماً فقط.
-   * @param {any} rawDays
-   * @returns {Record<string, DayRecord>}
-   */
-  function sanitizeDays(rawDays) {
-    /** @type {Record<string, DayRecord>} */
-    const days = {};
-    if (!rawDays || typeof rawDays !== "object" || Array.isArray(rawDays)) return days;
-    const today = dayKey();
-    const yesterday = dayKey(addDays(new Date(), -1));
-    const candidates = Object.keys(rawDays)
-      .filter((dateKey) => /^\d{4}-\d{2}-\d{2}$/.test(dateKey) && isRealDateKey(dateKey) && dateKey <= today)
-      .sort()
-      .slice(-(KEEP_DAYS + 1));
-    const sanitized = /** @type {Record<string, DayRecord>} */ ({});
-    candidates.forEach((dateKey) => {
-      const day = sanitizeDayRecord(rawDays[dateKey]);
-      if (Object.keys(SECTIONS).some((period) => Object.keys(day[period]).length > 0)) sanitized[dateKey] = day;
-    });
-    // نحتفظ بيوم إضافي مؤقتاً إذا كان اليوم قيد الإنجاز والأمس مكتملاً؛
-    // فهو ما يتيح حساب سلسلة حتى KEEP_DAYS + 1 من تفاصيل الأيام عند اكتمال اليوم.
-    const preserveStreakBridge = Boolean(
-      sanitized[today] && !isSanitizedDayComplete(sanitized[today]) &&
-      sanitized[yesterday] && isSanitizedDayComplete(sanitized[yesterday])
-    );
-    const selected = candidates.slice(-(KEEP_DAYS + (preserveStreakBridge ? 1 : 0)));
-    selected.forEach((dateKey) => {
-      if (sanitized[dateKey]) days[dateKey] = sanitized[dateKey];
-    });
-    return days;
-  }
-
-  // قراءة متزامنة من localStorage لأغراض الترحيل فقط (إصدارات APK القديمة).
-  /** @returns {string | null} */
-  function readLegacyLocalStorage() {
-    try { return localStorage.getItem(STORAGE_KEY); }
-    catch (error) { return null; }
-  }
-
-  // لا نعامل البيانات التالفة كحالة فارغة؛ نوقف الكتابة كي لا نمحو الأصل.
-  /** @returns {ProgressState | Promise<ProgressState>} */
-  function loadState() {
-    if (ADKAR_STORAGE.isNative) {
-      return ADKAR_STORAGE.get(STORAGE_KEY).then((raw) => {
-        if (raw) return parseLoadedState(raw);
-        // ترحيل لمرة واحدة: إصدارات APK السابقة كانت تحفظ في localStorage،
-        // فنقرأها وننسخها إلى Preferences حتى لا تظهر بيانات المستخدم مفقودة.
-        const legacy = readLegacyLocalStorage();
-        if (!legacy) return parseLoadedState(null);
-        const parsed = parseLoadedState(legacy);
-        if (!storageBlocked) ADKAR_STORAGE.set(STORAGE_KEY, legacy).catch(() => {});
-        return parsed;
-      });
-    }
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      return parseLoadedState(raw);
-    } catch (error) {
-      storageLoadIssue = error && error.name === "SecurityError"
-        ? "المتصفح منع الوصول إلى التخزين المحلي. لن نحاول الكتابة حتى يصبح التخزين متاحاً."
-        : "تعذّرت قراءة بيانات التقدم المخزنة. أوقفنا الحفظ التلقائي حتى لا تُستبدل البيانات التالفة.";
-      storageBlocked = true;
-      return emptyState();
-    }
-  }
-
-  /**
-   * يقرأ JSON المخزَّن ويطبّق التحقق والتطهير، ويوقف الحفظ عند التلف.
-   * @param {string | null} raw
-   * @returns {ProgressState}
-   */
-  function parseLoadedState(raw) {
-    try {
-      if (!raw) return emptyState();
-      const parsed = JSON.parse(raw);
-      if (!hasValidStoredShape(parsed)) {
-        storageLoadIssue = "بيانات التقدم المخزنة تالفة أو غير متوافقة. أوقفنا الحفظ التلقائي حفاظاً عليها.";
-        storageBlocked = true;
-        return emptyState();
-      }
-      if (Number(parsed.schemaVersion || 1) > STATE_SCHEMA_VERSION) {
-        storageLoadIssue = "بيانات التقدم من إصدار أحدث. حدّث التطبيق قبل تعديلها حتى لا تفقد بياناتك.";
-        storageBlocked = true;
-        return emptyState();
-      }
-      return { schemaVersion: STATE_SCHEMA_VERSION, days: sanitizeDays(parsed.days), stats: sanitizeStats(parsed.stats) };
-    } catch (error) {
-      storageLoadIssue = error && error.name === "SecurityError"
-        ? "المتصفح منع الوصول إلى التخزين المحلي. لن نحاول الكتابة حتى يصبح التخزين متاحاً."
-        : "تعذّرت قراءة بيانات التقدم المخزنة. أوقفنا الحفظ التلقائي حتى لا تُستبدل البيانات التالفة.";
-      storageBlocked = true;
-      return emptyState();
-    }
-  }
-
-  function reportStorageState(saved) {
-    const warning = elements.storageWarning;
-    if (!warning) return;
-    if (!saved) warning.textContent = storageLoadIssue || "تعذّر حفظ التقدم على هذا الجهاز؛ سيبقى التقدم في الذاكرة حتى إغلاق الصفحة.";
-    warning.hidden = saved;
-    if (!saved && !storageWarningShown) {
-      storageWarningShown = true;
-      announce(storageLoadIssue || "تعذّر حفظ التقدم على هذا الجهاز");
-    }
-  }
-
-  // يطبّق قواعد الحفظ المشتركة على الحالة ويعيد لقطة عميقة جاهزة للكتابة.
-  /** @returns {ProgressState} */
-  function prepareStateSnapshot() {
-    state.schemaVersion = STATE_SCHEMA_VERSION;
-    updateStreakStats();
-    state.stats = sanitizeStats(state.stats);
-    state.stats.bestStreak = Math.max(state.stats.bestStreak, getBestStreak());
-    return deepCopy(state);
-  }
-
-  // الحفظ على الويب دون Web Locks (وفي الاختبارات): كتابة متزامنة مباشرة
-  // حتى تبقى القراءة والكتابة فوريتين.
-  /**
-   * @param {ProgressState} snapshot
-   * @returns {boolean}
-   */
-  function saveWithoutLocks(snapshot) {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
-      lastPersistedState = deepCopy(snapshot);
-      reportStorageState(true);
-      return true;
-    } catch (error) {
-      reportStorageState(false);
-      return false;
-    }
-  }
-
-  // Web Locks يجعل القراءة والدمج والكتابة عملية متسلسلة بين التبويبات.
-  // من دونه لا توجد primitive ذرية في localStorage تضمن منع stale overwrite.
-  /**
-   * @param {ProgressState} localSnapshot
-   * @param {ProgressState} baseSnapshot
-   * @returns {void}
-   */
-  function saveUnderLock(localSnapshot, baseSnapshot) {
-    navigator.locks.request("adkar-progress-write", { mode: "exclusive" }, async () => {
-      if (storageBlocked) return;
-      const raw = await ADKAR_STORAGE.get(STORAGE_KEY);
-      const remote = parseStateSnapshot(raw);
-      if (!remote) {
-        storageBlocked = true;
-        storageLoadIssue = "بيانات التقدم المخزنة تغيّرت إلى بنية تالفة أثناء المزامنة. أوقفنا الكتابة حفاظاً عليها.";
-        reportStorageState(false);
-        return;
-      }
-      const merged = mergeConcurrentState(baseSnapshot, localSnapshot, remote);
-      state = merged;
-      updateStreakStats();
-      state.stats.bestStreak = Math.max(state.stats.bestStreak, getBestStreak());
-      await ADKAR_STORAGE.set(STORAGE_KEY, JSON.stringify(state));
-      lastPersistedState = deepCopy(state);
-      reportStorageState(true);
-    }).catch(() => {
-      storageLoadIssue = "تعذّر حفظ التقدم داخل قفل المزامنة. بقي التقدم في الذاكرة ولم نكتب فوق البيانات.";
-      reportStorageState(false);
-    });
-  }
-
-  /** @returns {Promise<boolean>} */
-  async function saveState() {
-    if (storageBlocked) { reportStorageState(false); return false; }
-    const localSnapshot = prepareStateSnapshot();
-    const hasLocksSave = typeof navigator !== "undefined" && !!navigator.locks && typeof navigator.locks.request === "function";
-    // On the web without Web Locks (and in tests), keep the original synchronous
-    // localStorage path so reads/writes stay immediate.
-    if (!ADKAR_STORAGE.isNative && !hasLocksSave) {
-      return saveWithoutLocks(localSnapshot);
-    }
-    // يجب التقاط قاعدة الدمج عند طلب القفل، لا عند تنفيذه؛ فقد تصل storage event
-    // أثناء انتظار القفل وتحدّث lastPersistedState قبل دور هذه العملية.
-    const baseSnapshot = deepCopy(lastPersistedState || emptyState());
-
-    if (hasLocksSave) {
-      saveUnderLock(localSnapshot, baseSnapshot);
-      return true;
-    }
-
-    try {
-      await ADKAR_STORAGE.set(STORAGE_KEY, JSON.stringify(localSnapshot));
-      lastPersistedState = deepCopy(localSnapshot);
-      reportStorageState(true);
-      return true;
-    } catch (error) {
-      reportStorageState(false);
-      return false;
-    }
-  }
-
-  // نحدّث إحصاءات السلسلة قبل التقليم، ونحتفظ بجسر يوم إضافي حتى يكتمل يوم اليوم.
-  function pruneDays() {
-    updateStreakStats();
-    const today = dayKey();
-    const yesterday = dayKey(addDays(new Date(), -1));
-    const preserveStreakBridge = !isDayComplete(today) && isDayComplete(yesterday);
-    const limit = KEEP_DAYS + (preserveStreakBridge ? 1 : 0);
-    const keys = Object.keys(state.days).sort();
-    while (keys.length > limit) {
-      delete state.days[keys.shift()];
-    }
-  }
-
-  /**
-   * يوم واحد من الحالة، بأقسامه الأربعة مضمونة.
-   * @param {string} dateKey
-   * @returns {DayRecord}
-   */
-  function getDay(dateKey) {
-    const day = state.days[dateKey];
-    if (!day || typeof day !== "object") return emptyDay();
-    // نعيد نسخاً بأربعة أقسام مضمونة، فلا يكسر غياب قسماً القراءة لاحقاً.
-    return {
-      morning: day.morning || {},
-      evening: day.evening || {},
-      wake: day.wake || {},
-      sleep: day.sleep || {},
-    };
-  }
-
-  /**
-   * إدخال ذكر واحد في يوم اليوم.
-   * @param {string} period
-   * @param {string} entryKey
-   * @returns {DayEntry | null}
-   */
-  function getEntry(period, entryKey) {
-    const day = state.days[dayKey()];
-    const record = day && day[period];
-    return (record && record[entryKey]) || null;
-  }
-
-  // يكتب إدخال ذكر معين في يوم اليوم ثم يحفظ فوراً (حتى لا يضيع
-  // التقدم عند إغلاق الصفحة قبل أي حفظ لاحق).
-  /**
-   * @param {string} period
-   * @param {string} entryKey
-   * @param {DayEntry} value
-   */
-  function setEntry(period, entryKey, value) {
-    const today = dayKey();
-    const day = getDay(today);
-    day[period][entryKey] = value;
-    state.days[today] = day;
-    pruneDays();
-    saveState();
-  }
-
-  /**
-   * @param {DhikrItem} item
-   * @param {DayEntry} [entry]
-   * @returns {boolean}
-   */
-  function isItemComplete(item, entry) {
-    if (!entry) return false;
-    if (item.count === 0) return Boolean(entry.done);
-    return (entry.count || 0) >= item.count;
-  }
-
-  /**
-   * هل سُجّل أي تقدم لهذا الذكر (عدّ أو إتمام)؟ يحدد ظهور زر «إعادة».
-   * @param {DayEntry} entry
-   * @returns {boolean}
-   */
-  const hasProgress = (entry) => entry.count > 0 || entry.done;
-
-  /**
-   * @param {string} period
-   * @param {string} [dateKey]
-   * @returns {number}
-   */
-  function countCompleted(period, dateKey = dayKey()) {
-    const record = getDay(dateKey)[period];
-    return SECTIONS[period].items.reduce(
-      (total, item) =>
-        isItemComplete(item, record[itemKey(period, item)]) ? total + 1 : total,
-      0
-    );
-  }
-
-  /**
-   * @param {string} period
-   * @param {string} dateKey
-   * @returns {boolean}
-   */
-  function isSectionComplete(period, dateKey) {
-    return countCompleted(period, dateKey) === SECTIONS[period].items.length;
-  }
-
-  /**
-   * عدد الأذكار المكتملة في كل الأقسام ليوم واحد، بمرور واحد على الأقسام.
-   * @param {string} dateKey
-   * @returns {{ [period: string]: number }}
-   */
-  function countAllSections(dateKey) {
-    /** @type {{ [period: string]: number }} */
-    const counts = {};
-    Object.keys(SECTIONS).forEach((period) => {
-      counts[period] = countCompleted(period, dateKey);
-    });
-    return counts;
-  }
-
-  /**
-   * هل اكتمل كل قسم في يوم واحد؟
-   * @param {string} dateKey
-   * @returns {{ [period: string]: boolean }}
-   */
-  function completionSnapshot(dateKey) {
-    const counts = countAllSections(dateKey);
-    /** @type {{ [period: string]: boolean }} */
-    const completed = {};
-    Object.keys(SECTIONS).forEach((period) => {
-      completed[period] = counts[period] === SECTIONS[period].items.length;
-    });
-    return completed;
-  }
-
-  /* ===== الإعدادات ===== */
-  // يبني إعدادات سليمة من أي مصدر (تخزين أو ملف استيراد): القيم غير
-  // المعروفة تعود إلى الافتراضي بدل أن تبقى ولا معنى لها.
-  /**
-   * @param {any} raw
-   * @returns {Settings | null}
-   */
-  function normalizeSettings(raw) {
-    if (!raw || typeof raw !== "object") return null;
-    const lastExportAt =
-      typeof raw.lastExportAt === "string" && !Number.isNaN(Date.parse(raw.lastExportAt))
-        ? raw.lastExportAt
-        : null;
-    return {
-      fontSize: FONT_SIZES.includes(raw.fontSize) ? raw.fontSize : DEFAULT_SETTINGS.fontSize,
-      theme: THEMES.includes(raw.theme) ? raw.theme : DEFAULT_SETTINGS.theme,
-      lastExportAt,
-    };
-  }
-
-  /** @returns {Settings} */
-  function loadSettings() {
-    try {
-      const raw = localStorage.getItem(SETTINGS_KEY);
-      if (!raw) return { ...DEFAULT_SETTINGS };
-      return normalizeSettings(JSON.parse(raw)) || { ...DEFAULT_SETTINGS };
-    } catch (error) {
-      return { ...DEFAULT_SETTINGS };
-    }
-  }
-
-  /** @returns {void} */
-  function saveSettings() {
-    try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-    } catch (error) {
-      // التخزين قد يكون معطلاً — تبقى الإعدادات سارية في الذاكرة.
-    }
-  }
-
-  function applyFontSize() {
-    document.documentElement.dataset.fontSize = settings.fontSize;
-  }
-
-  let lastVisualPeriod = null;
-  // يترجم الثيم المختار إلى لون فعلي: ثيم يدوي يلتزم قيمته، و"time"
-  // يتبع الساعة، و"auto" يتبع القسم المعروض حالياً. قيمة lastVisualPeriod
-  // تمنع لمس DOM في كل استدعاء إذا لم يتغير اللون.
-  function applyTheme() {
-    let visualPeriod;
-    if (settings.theme === "morning" || settings.theme === "evening") visualPeriod = settings.theme;
-    else if (settings.theme === "time") visualPeriod = detectPeriod();
-    else visualPeriod = activePeriod;
-    if (visualPeriod === lastVisualPeriod) return;
-    lastVisualPeriod = visualPeriod;
-    document.documentElement.dataset.period = visualPeriod;
-  }
-
-  function refreshClockTheme() {
-    if (settings.theme === "time") applyTheme();
-  }
-
-  // تطبيق الإعدادات المحفوظة على الصفحة: حجم الخط، واللون، وحالة أزرار الإعدادات.
-  // كل مسار يقرأ الإعدادات من جديد (بدء التشغيل، تبويب آخر، ملف مستورد) يمر من هنا.
-  function applySettingsToUi() {
+/* ===== الإعدادات والنسخ الاحتياطي والانتقال والتراجع ===== */
+elements.fontButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    settings.fontSize = button.dataset.fontSize;
+    saveSettings();
     applyFontSize();
+    syncSettingsUI();
+    announce("تم تغيير حجم نص الأذكار");
+  });
+});
+
+elements.themeButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    settings.theme = button.dataset.theme;
+    saveSettings();
     applyTheme();
     syncSettingsUI();
-  }
+    announce("تم تغيير الألوان");
+  });
+});
 
-  function syncSettingsUI() {
-    elements.fontButtons.forEach((button) => {
-      button.setAttribute("aria-pressed", String(button.dataset.fontSize === settings.fontSize));
-    });
-    elements.themeButtons.forEach((button) => {
-      button.setAttribute("aria-pressed", String(button.dataset.theme === settings.theme));
-    });
-  }
+elements.nextButton.addEventListener("click", goToNextIncomplete);
+elements.undoButton.addEventListener("click", performUndo);
 
-  /* ===== عناصر الصفحة ===== */
-  // تجميع كل عناصر DOM المطلوبة مرة واحدة في البداية بدل البحث
-  // المتكرر؛ الاختبارات تعتمد على أن كل المعرّفات هنا موجودة فعلاً.
-  const elements = {
-    list: document.getElementById("dhikr-list"),
-    title: document.getElementById("period-title"),
-    hint: document.getElementById("period-hint"),
-    progressText: document.getElementById("progress-text"),
-    progressBar: document.getElementById("progress-bar"),
-    progressFill: document.getElementById("progress-fill"),
-    storageWarning: document.getElementById("storage-warning"),
-    reset: document.getElementById("reset-day"),
-    gregDate: document.getElementById("date-greg"),
-    hijriDate: document.getElementById("date-hijri"),
-    live: document.getElementById("live"),
-    page: /** @type {HTMLElement} */ (document.querySelector(".page")),
-    timeLeft: document.getElementById("time-left"),
-    nextButton: /** @type {HTMLButtonElement} */ (document.getElementById("next-incomplete")),
-    undoBar: document.getElementById("undo-bar"),
-    undoText: document.getElementById("undo-text"),
-    undoButton: document.getElementById("undo-button"),
-    fontButtons: /** @type {HTMLButtonElement[]} */ (Array.from(document.querySelectorAll("[data-font-size]"))),
-    themeButtons: /** @type {HTMLButtonElement[]} */ (Array.from(document.querySelectorAll("[data-theme]"))),
-    exportButton: document.getElementById("export-backup"),
-    importButton: document.getElementById("import-backup"),
-    exportCsvButton: document.getElementById("export-csv"),
-    importFile: /** @type {HTMLInputElement} */ (document.getElementById("import-file")),
-    importConfirm: document.getElementById("import-confirm"),
-    importSummary: document.getElementById("import-summary"),
-    importApply: document.getElementById("import-apply"),
-    importMerge: document.getElementById("import-merge"),
-    importCancel: document.getElementById("import-cancel"),
-    backupStatus: document.getElementById("backup-status"),
-    backupReminder: document.getElementById("backup-reminder"),
-    tabs: /** @type {HTMLButtonElement[]} */ (Array.from(document.querySelectorAll(".tab"))),
-    tablist: /** @type {HTMLElement} */ (document.querySelector(".period-tabs")),
-    streakCurrent: document.getElementById("streak-current"),
-    streakBest: document.getElementById("streak-best"),
-    streakNote: document.getElementById("streak-note"),
-    weeklySummary: document.getElementById("weekly-summary"),
-    calendarMonth: document.getElementById("calendar-month"),
-    calendarPrev: /** @type {HTMLButtonElement} */ (document.getElementById("calendar-prev")),
-    calendarNext: /** @type {HTMLButtonElement} */ (document.getElementById("calendar-next")),
-    calendarGrid: document.getElementById("calendar-grid"),
-    calendarDetail: document.getElementById("calendar-detail"),
-    counterDialog: /** @type {HTMLDialogElement} */ (document.getElementById("counter-dialog")),
-    counterTitle: document.getElementById("counter-title"),
-    counterText: document.getElementById("counter-text"),
-    counterCount: document.getElementById("counter-count"),
-    counterFill: document.getElementById("counter-fill"),
-    counterButton: /** @type {HTMLButtonElement} */ (document.getElementById("counter-button")),
-    counterClose: document.getElementById("counter-close"),
-    counterReset: /** @type {HTMLButtonElement} */ (document.getElementById("counter-reset")),
-    supplementGroup: document.getElementById("supplement-group"),
-    supplementTitle: document.getElementById("supplement-title"),
-    supplementNote: document.getElementById("supplement-note"),
-    supplementList: document.getElementById("supplement-list"),
-    supplementProgress: document.getElementById("supplement-progress"),
-    supplementBar: document.getElementById("supplement-bar"),
-    supplementFill: document.getElementById("supplement-fill"),
-  };
+elements.exportButton.addEventListener("click", exportBackup);
+elements.exportCsvButton.addEventListener("click", exportCsv);
+elements.importButton.addEventListener("click", () => elements.importFile.click());
+elements.importFile.addEventListener("change", () => {
+  const file = elements.importFile.files && elements.importFile.files[0];
+  handleImportFile(file);
+});
+elements.importApply.addEventListener("click", applyImport);
+elements.importMerge.addEventListener("click", applyMerge);
+elements.importCancel.addEventListener("click", cancelImport);
 
-  // الإعدادات والحالة تُقرأ من التخزين مرة واحدة عند الإقلاع، وما بعدها
-  // حالة واجهة مؤقتة: خرائط أدوات التحكم، مؤقتات، ومؤشرات لاحظناها.
-  let storageBlocked = false;
-  let storageLoadIssue = null;
-  let settings = loadSettings();
-  let state = await loadState();
-  // آخر نسخة نعرف أنها حُفظت؛ تُستخدم كقاعدة دمج داخل قفل الكتابة بين التبويبات.
-  let lastPersistedState = deepCopy(state);
-  let activePeriod = "morning";
-  let renderedDay = dayKey();
-  let itemControllers = new Map(); // مفتاح الذكر -> أدوات تحكم بطاقته
-  let lastAction = null;
-  let undoTimer = null;
-  let highlightTimer = null;
-  let pendingImport = /** @type {BackupPreview | null} */ (null); // ملف الاستيراد بانتظار اختيار «دمج» أو «استبدال»
-  let touchStart = null;
-  let insightsSignature = ""; // بصمة عدّادات الأقسام لتحديث الإحصاءات عند تغيّرها فقط
-  let previousDone = null; // عدد المكتمل قبل آخر تحديث، لكشف «اكتمل الآن»
-  let previousSupplementDone = null;
-  let calendarMonth = startOfMonth(new Date());
-  let selectedCalendarKey = dayKey();
-  let counterKey = null; // الذكر المعروض في نافذة العدّاد حالياً
-  let counterOpener = null; // الزر الذي فتح النافذة، لإعادة تركيزه بعد الإغلاق
-  let counterResetArmed = false; // مرحلة تأكيد زر «إعادة العدّ»
-  let counterResetTimer = null;
-  let pendingCelebration = null; // احتفال مؤجّل حتى إغلاق نافذة العدّاد
-  let pendingSupplementCelebration = null;
-  let storageWarningShown = false;
+elements.calendarPrev.addEventListener("click", () => {
+  const calendarMonth = startOfMonth(addMonths(getCalendarMonth(), -1));
+  setCalendarMonth(calendarMonth);
+  setSelectedCalendarKey(dayKey(calendarMonth));
+  renderCalendar();
+});
 
-  /* ===== التاريخ ===== */
-  // إنشاء Intl.DateTimeFormat مكلف، لذا ننشئ كل منسّق مرة واحدة بدل مرة لكل خلية تقويم.
-  /**
-   * @param {string} locale
-   * @param {Intl.DateTimeFormatOptions} options
-   * @returns {Intl.DateTimeFormat | null}
-   */
-  function createDateFormatter(locale, options) {
-    try {
-      return new Intl.DateTimeFormat(locale, options);
-    } catch (error) {
-      return null;
-    }
-  }
+elements.calendarNext.addEventListener("click", () => {
+  const calendarMonth = startOfMonth(addMonths(getCalendarMonth(), 1));
+  setCalendarMonth(calendarMonth);
+  setSelectedCalendarKey(dayKey(calendarMonth));
+  renderCalendar();
+});
 
-  const formatters = {
-    gregorian: createDateFormatter("ar", {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    }),
-    hijri: createDateFormatter("ar-SA-u-ca-islamic-umalqura", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    }),
-    weekday: createDateFormatter("ar", { weekday: "long" }),
-    month: createDateFormatter("ar", { month: "long", year: "numeric" }),
-    backupDate: createDateFormatter("ar", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    }),
-  };
+/* ===== السحب الأفقي بين القسمين ===== */
+// نتابع اللمس على الصفحة نفسها فقط: لا أزرار ولا حقول ولا التذييل.
+// عند الإفلات نقبل السحبة إن كانت أفقية بوضوح (طول ≥ 60 بكسل،
+// أفقي أكبر من عمودي 1.5 مرة)، وبدأت بعيداً عن حواف الشاشة،
+// وليس أثناء تحديد نص — ثم نبدّل القسم حسب اتجاه السحب.
+elements.page.addEventListener(
+  "touchstart",
+  (event) => {
+    if (event.touches.length !== 1) return;
 
-  function formatGregorian(date) {
-    return formatters.gregorian ? formatters.gregorian.format(date) : date.toLocaleDateString();
-  }
+    const target = /** @type {Element | null} */ (event.target);
+    if (!target || typeof target.closest !== "function") return;
+    if (target.closest("button, a, input, select, textarea, label")) return;
+    if (target.closest(".site-footer")) return;
 
-  function formatHijri(date) {
-    // نضيف «هـ» يدوياً لأن التنسيق الهجري يعطي السنة رقمها فقط.
-    return formatters.hijri ? `${formatters.hijri.format(date)}هـ` : "";
-  }
-
-  function updateDates() {
-    const now = new Date();
-    elements.gregDate.textContent = formatGregorian(now);
-    elements.hijriDate.textContent = formatHijri(now);
-  }
-
-  // يقسم اليوم إلى صباح/مساء بحسب الساعة الحالية، وهو أساس الثيم "time"
-  // واختيار القسم المبدئي عند فتح الصفحة.
-  function detectPeriod() {
-    const hour = new Date().getHours();
-    const range = PERIOD_WINDOWS.morning;
-    return hour >= range.start && hour < range.end ? "morning" : "evening";
-  }
-
-  /* ===== بناء بطاقة الذكر ===== */
-  // إنشاء <p> بأمان: textContent دائماً لأن نصوص الأذكار قد تُنسخ
-  // من ملف استيراد، فلا يُفسَّر أي شيء كوسوم HTML.
-  /**
-   * @param {string} className
-   * @param {string} text
-   * @returns {HTMLParagraphElement}
-   */
-  function paragraph(className, text) {
-    const element = document.createElement("p");
-    element.className = className;
-    element.textContent = text;
-    return element;
-  }
-
-  /**
-   * @param {DhikrItem} item
-   * @param {DayEntry} progress
-   * @returns {string}
-   */
-  function buildLabel(item, progress) {
-    if (item.count <= 1) return "تم";
-    return `${toArabicNumber(progress.count)} من ${toArabicNumber(item.count)}`;
-  }
-
-  /**
-   * @param {DhikrItem} item
-   * @param {DayEntry} progress
-   * @param {boolean} complete
-   * @returns {string}
-   */
-  function buildAriaLabel(item, progress, complete) {
-    if (complete) return `مكتمل: ${item.title}`;
-    if (item.count === 0) return `تسجيل الانتهاء من: ${item.title}`;
-    if (item.count === 1) return `تسجيل: ${item.title}`;
-    return `تسجيل ${item.title}، أكملت ${toArabicNumber(progress.count)} من ${toArabicNumber(item.count)}`;
-  }
-
-  // ترتيب نص الذكر: البسملة إن وردت، فالآية بين قوسين قرآنيين، فالفواصل،
-  // فالمصدر، فالملاحظة — نفس الترتيب في القائمة وفي نافذة العدّاد.
-  /**
-   * @param {HTMLElement} container
-   * @param {DhikrItem} item
-   * @returns {void}
-   */
-  function appendDhikrText(container, item) {
-    if (item.basmala) {
-      container.append(paragraph("basmala", "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ"));
-    }
-    if (item.ayah) {
-      container.append(paragraph("ayah", "﴿" + item.ayah + "﴾"));
-    }
-    (item.lines || []).forEach((line) => {
-      container.append(paragraph("dhikr-text", line));
-    });
-    if (item.source) {
-      container.append(paragraph("source", "[" + item.source + "]"));
-    }
-    if (item.note) {
-      container.append(paragraph("note", item.note));
-    }
-  }
-
-  /**
-   * عناصر بطاقة الذكر التي يعيد رسمها paintItemCard.
-   * @typedef {{ card: HTMLLIElement, pill: HTMLButtonElement, undo: HTMLButtonElement }} ItemCardNodes
-   */
-
-  /**
-   * يبني هيكل بطاقة الذكر ويربط زر العدّاد، دون أي منطق تقدم.
-   * @param {DhikrItem} item
-   * @param {number} index
-   * @param {string} entryKey
-   * @returns {ItemCardNodes}
-   */
-  function buildItemCard(item, index, entryKey) {
-    const card = document.createElement("li");
-    card.className = "dhikr";
-
-    const marker = document.createElement("span");
-    marker.className = "marker";
-    marker.setAttribute("aria-hidden", "true");
-    marker.textContent = toArabicNumber(index + 1);
-
-    const body = document.createElement("div");
-    body.className = "dhikr-body";
-
-    const head = document.createElement("div");
-    head.className = "dhikr-head";
-
-    const title = document.createElement("h2");
-    title.className = "dhikr-title";
-    title.textContent = item.title;
-    head.append(title);
-
-    if (item.count === 0) {
-      const badge = document.createElement("span");
-      badge.className = "badge";
-      badge.textContent = "بلا عدد محدد";
-      head.append(badge);
-    }
-
-    body.append(head);
-    appendDhikrText(body, item);
-
-    const actions = document.createElement("div");
-    actions.className = "dhikr-actions";
-
-    const counterButton = document.createElement("button");
-    counterButton.type = "button";
-    counterButton.className = "counter-open";
-    counterButton.textContent = "عدّ";
-    counterButton.setAttribute("aria-label", `فتح العدّاد: ${item.title}`);
-    counterButton.addEventListener("click", () => openCounter(entryKey, counterButton));
-
-    const pill = document.createElement("button");
-    pill.type = "button";
-    pill.className = "pill";
-
-    const undo = document.createElement("button");
-    undo.type = "button";
-    undo.className = "undo";
-    undo.textContent = "إعادة";
-    undo.setAttribute("aria-label", `إعادة تعيين: ${item.title}`);
-
-    if (item.count > 1) actions.append(counterButton);
-    actions.append(pill, undo);
-    body.append(actions);
-    card.append(marker, body);
-
-    return { card, pill, undo };
-  }
-
-  // رسم البطاقة من قيمة progress الحالية: النص، حالات aria،
-  // وإظهار زر «إعادة» عند وجود تقدم فقط.
-  /**
-   * @param {ItemCardNodes} nodes
-   * @param {DhikrItem} item
-   * @param {DayEntry} progress
-   * @returns {void}
-   */
-  function paintItemCard(nodes, item, progress) {
-    const complete = isItemComplete(item, progress);
-
-    nodes.card.classList.toggle("is-done", complete);
-    nodes.pill.classList.toggle("is-done", complete);
-    nodes.pill.textContent = complete ? "تم ✓" : buildLabel(item, progress);
-    nodes.pill.setAttribute("aria-disabled", String(complete));
-    nodes.pill.setAttribute("aria-label", buildAriaLabel(item, progress, complete));
-    if (item.count <= 1) {
-      nodes.pill.setAttribute("aria-pressed", String(complete));
-    }
-    nodes.undo.hidden = !hasProgress(progress);
-  }
-
-  /* بناء بطاقة ذكر واحدة وإرجاعها.
-     كل بطاقة تُغلق على حالتها الخاصة (progress) ودوالها: paint يعيد
-     رسم الشكل، persist يحفظ في التخزين، increment وresetProgress
-     يعدّلان الحالة ويسجلان إجراءً قابلاً للتراجع. تُجمع المؤشرات في
-     itemControllers لتبقى مفاتيح التراجع والعدّاد تعمل بعد أي إعادة رسم. */
-  /**
-   * @param {string} period
-   * @param {DhikrItem} item
-   * @param {number} index
-   * @returns {HTMLLIElement}
-   */
-  function createItem(period, item, index) {
-    const entryKey = itemKey(period, item);
-    const saved = getEntry(period, entryKey);
-    const progress = {
-      count: Number(saved && saved.count) || 0,
-      done: Boolean(saved && saved.done),
+    touchStart = {
+      x: event.touches[0].clientX,
+      y: event.touches[0].clientY,
+      time: Date.now(),
     };
-    const nodes = buildItemCard(item, index, entryKey);
+  },
+  { passive: true }
+);
 
-    function paint() {
-      paintItemCard(nodes, item, progress);
-    }
+elements.page.addEventListener(
+  "touchend",
+  (event) => {
+    if (!touchStart) return;
+    const start = touchStart;
+    touchStart = null;
 
-    function persist() {
-      setEntry(period, entryKey, { count: progress.count, done: progress.done });
-    }
+    const touch = event.changedTouches[0];
+    if (!touch) return;
 
-    function snapshot() {
-      return { count: progress.count, done: progress.done };
-    }
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    const elapsed = Date.now() - start.time;
+    const selection = window.getSelection ? String(window.getSelection()) : "";
 
-    function increment() {
-      if (isItemComplete(item, progress)) return false;
-      const before = snapshot();
+    if (elapsed > SWIPE_MAX_DURATION_MS) return;
+    if (Math.abs(dx) < SWIPE_MIN_DISTANCE_PX) return;
+    if (Math.abs(dx) < Math.abs(dy) * SWIPE_AXIS_RATIO) return;
+    if (start.x < SWIPE_EDGE_MARGIN_PX || start.x > window.innerWidth - SWIPE_EDGE_MARGIN_PX) return;
+    if (selection.length > 0) return;
 
-      if (item.count === 0) {
-        progress.done = true;
-      } else {
-        progress.count = Math.min(progress.count + 1, item.count);
-        progress.done = progress.count >= item.count;
-      }
+    const nextPeriod = dx < 0 ? "evening" : "morning";
+    if (nextPeriod !== getActivePeriod()) renderPeriod(nextPeriod);
+  },
+  { passive: true }
+);
 
-      persist();
-      paint();
-      showUndo(
-        entryKey,
-        item.title,
-        before,
-        isItemComplete(item, progress) ? "تم إكمال" : "تم تسجيل"
-      );
+elements.page.addEventListener(
+  "touchcancel",
+  () => {
+    touchStart = null;
+  },
+  { passive: true }
+);
 
-      if (isItemComplete(item, progress)) {
-        announce(`تم إكمال: ${item.title}`);
-      }
-      updateProgress();
-      return true;
-    }
+/* ===== إعادة تعيين اليوم (بخطوتين) ===== */
+// نفس نمط تأكيد العدّاد: أول ضغطة تفعّل التأكيد أربع ثوانٍ،
+// والثانية خلالها تمسح تقدم اليوم بالكامل.
+function cancelReset() {
+  clearTimeout(resetTimer);
+  resetTimer = null;
+  elements.reset.classList.remove("is-confirming");
+  elements.reset.textContent = "إعادة تعيين اليوم";
+}
 
-    function resetProgress() {
-      if (!hasProgress(progress)) return false;
-      const before = snapshot();
-      progress.count = 0;
-      progress.done = false;
-      persist();
-      paint();
-      updateProgress();
-      showUndo(entryKey, item.title, before, "أُعيد تعيين");
-      announce(`أُعيد تعيين: ${item.title}`);
-      return true;
-    }
-
-    nodes.pill.addEventListener("click", increment);
-    nodes.undo.addEventListener("click", resetProgress);
-
-    paint();
-    itemControllers.set(entryKey, {
-      element: nodes.card,
-      item,
-      period,
-      index,
-      increment,
-      reset: resetProgress,
-      getProgress: snapshot,
-      applyProgress(next) {
-        progress.count = next.count;
-        progress.done = next.done;
-        persist();
-        paint();
-      },
-      focusPill() {
-        nodes.pill.focus({ preventScroll: true });
-      },
-    });
-    return nodes.card;
+elements.reset.addEventListener("click", () => {
+  if (!elements.reset.classList.contains("is-confirming")) {
+    elements.reset.classList.add("is-confirming");
+    elements.reset.textContent = "اضغط مرة أخرى للتأكيد";
+    resetTimer = setTimeout(cancelReset, CONFIRM_WINDOW_MS);
+    return;
   }
 
-  /* ===== عرض القسم ===== */
-  // إعادة بناء القسم كاملاً: بطاقات الأذكار ثم المجموعة المكمّلة
-  // (الاستيقاظ/النوم) وحالات التبويبات، ثم تحديث كل الأرقام.
-  /**
-   * @param {string} period
-   * @returns {void}
-   */
-  function renderPeriod(period) {
-    closeCounter({ celebratePending: false });
-    activePeriod = period;
-    applyTheme();
-    hideUndo();
-
-    const section = SECTIONS[period];
-    elements.title.textContent = section.name;
-    elements.hint.textContent = section.hint;
-    elements.list.setAttribute("aria-labelledby", `tab-${period}`);
-    itemControllers = new Map();
-    elements.list.replaceChildren(
-      ...section.items.map((item, index) => createItem(period, item, index))
-    );
-
-    const supplement = SUPPLEMENTS[period];
-    elements.supplementGroup.hidden = !supplement;
-    elements.supplementList.replaceChildren();
-    if (supplement) {
-      elements.supplementTitle.textContent = supplement.name;
-      elements.supplementNote.textContent = supplement.note;
-      elements.supplementList.replaceChildren(
-        ...SECTIONS[supplement.period].items.map((item, index) =>
-          createItem(supplement.period, item, index)
-        )
-      );
-    }
-
-    elements.tabs.forEach((tab) => {
-      const selected = tab.dataset.period === period;
-      tab.setAttribute("aria-selected", String(selected));
-      tab.tabIndex = selected ? 0 : -1;
-    });
-
-    previousDone = countCompleted(period);
-    previousSupplementDone = supplement ? countCompleted(supplement.period) : null;
-    insightsSignature = "";
-    updateProgress();
-    updateTimeLeft();
-  }
-
-  // عنوان تبويب المتصفح يعرض المتبقي: مؤشر مختصر يظهر أثناء التنقل
-  // بين التطبيقات دون العودة إلى الصفحة.
-  function updateTabTitle(section, done, total) {
-    const remaining = total - done;
-    document.title =
-      remaining === 0 ? `✓ ${section.name}` : `(${toArabicNumber(remaining)}) ${section.name}`;
-  }
-
-  // يرسم شريط المجموعة المكمّلة (الاستيقاظ/النوم) ويعيد هل اكتملت الآن،
-  // حتى يبقى updateProgress مسؤولاً عن القسم الأساسي وحده.
-  /**
-   * @param {{ [period: string]: number }} counts
-   * @returns {boolean}
-   */
-  function renderSupplementProgress(counts) {
-    const supplement = SUPPLEMENTS[activePeriod];
-    let justCompletedSupplement = false;
-
-    if (!supplement) return false;
-
-    const supplementTotal = SECTIONS[supplement.period].items.length;
-    const supplementDone = counts[supplement.period];
-    elements.supplementProgress.textContent =
-      supplementDone === supplementTotal
-        ? `أكملت ${supplement.name}`
-        : `أكملت ${toArabicNumber(supplementDone)} من ${toArabicNumber(supplementTotal)}`;
-    elements.supplementFill.style.width = `${(supplementDone / supplementTotal) * 100}%`;
-    elements.supplementBar.setAttribute("aria-valuenow", String(supplementDone));
-    elements.supplementBar.setAttribute("aria-valuemax", String(supplementTotal));
-    elements.supplementBar.setAttribute("aria-label", `تقدم ${supplement.name}`);
-
-    justCompletedSupplement =
-      previousSupplementDone !== null &&
-      supplementDone === supplementTotal &&
-      previousSupplementDone < supplementTotal;
-    previousSupplementDone = supplementDone;
-    return justCompletedSupplement;
-  }
-
-  function updateProgress() {
-    const section = SECTIONS[activePeriod];
-    const total = section.items.length;
-    // نحسب عدّادات الأقسام مرة واحدة، لأن كل استدعاء لـ countCompleted يمر على كل الأذكار.
-    const counts = countAllSections(dayKey());
-    const done = counts[activePeriod];
-    // «اكتمل الآن» = صار العدد المساوي للإجمالي وكان أقل منه في التحديث السابق؛
-    // هذا الفرق هو ما يشغّل الاحتفال مرة واحدة لا عند كل تحديث.
-    const justCompleted = previousDone !== null && done === total && previousDone < total;
-    previousDone = done;
-
-    elements.progressText.textContent =
-      done === total
-        ? `أكملت ${section.name}`
-        : `أكملت ${toArabicNumber(done)} من ${toArabicNumber(total)}`;
-    elements.progressFill.style.width = total ? `${(done / total) * 100}%` : "0%";
-    elements.progressBar.setAttribute("aria-valuenow", String(done));
-    elements.progressBar.setAttribute("aria-valuemax", String(total));
-    elements.progressBar.setAttribute("aria-label", `تقدم ${section.name}`);
-
-    const remaining = total - done;
-    elements.nextButton.disabled = remaining === 0;
-    elements.nextButton.textContent =
-      remaining === 0 ? "أكملت القسم" : `التالي — بقي ${toArabicNumber(remaining)}`;
-
-    elements.tabs.forEach((tab) => {
-      const period = tab.dataset.period;
-      const periodTotal = SECTIONS[period].items.length;
-      const periodDone = counts[period];
-      tab.querySelector(".tab-count").textContent =
-        `${toArabicNumber(periodDone)} من ${toArabicNumber(periodTotal)}`;
-    });
-
-    updateTabTitle(section, done, total);
-
-    const justCompletedSupplement = renderSupplementProgress(counts);
-
-    const signature = `${counts.morning}:${counts.evening}:${counts.wake}:${counts.sleep}`;
-    // التقويم والسلسلة إعادة حساب مكلفة، فلا نحدثهما إلا حين تتغير الأعداد.
-    if (signature !== insightsSignature) {
-      insightsSignature = signature;
-      renderInsights();
-    }
-
-    if (justCompleted) celebrate(section);
-    if (justCompletedSupplement) celebrateSupplement(SUPPLEMENTS[activePeriod]);
-  }
-
-  /* ===== التقدم: السلسلة والملخص والتقويم ===== */
-  function formatWeekday(date) {
-    return formatters.weekday ? formatters.weekday.format(date) : "";
-  }
-
-  function formatMonthLabel(date) {
-    return formatters.month
-      ? formatters.month.format(date)
-      : `${date.getMonth() + 1}/${date.getFullYear()}`;
-  }
-
-  // السلسلة الحالية: نبدأ من اليوم إن كان مكتملاً وإلا من الأمس
-  // (ليستسع اليوم الجاري دون أن يقطع سلسلة الأمس)، ثم نعدّ الأيام
-  // المكتملة المتتالية إلى الوراء حتى أول انقطاع.
-  function getStreakEndingAt(endKey) {
-    let cursor = parseDateKey(endKey);
-    let streak = 0;
-    for (let index = 0; index < KEEP_DAYS + 1; index += 1) {
-      if (!isDayComplete(dayKey(cursor))) break;
-      streak += 1;
-      cursor = addDays(cursor, -1);
-    }
-    return streak;
-  }
-
-  function updateStreakStats() {
-    const stats = sanitizeStats(state.stats);
-    const today = dayKey();
-    const yesterday = dayKey(addDays(new Date(), -1));
-    if (isDayComplete(today)) {
-      if (stats.currentStreakDate !== today) {
-        const previousStreak = isDayComplete(yesterday)
-          ? (stats.currentStreakDate === yesterday ? stats.currentStreak : getStreakEndingAt(yesterday))
-          : 0;
-        stats.currentStreak = previousStreak + 1;
-        stats.currentStreakDate = today;
-      }
-      state.stats = stats;
-      stats.bestStreak = Math.max(stats.bestStreak, stats.currentStreak, getBestStreak());
-    } else if (stats.currentStreakDate === today) {
-      if (isDayComplete(yesterday)) {
-        stats.currentStreak = Math.max(0, stats.currentStreak - 1);
-        stats.currentStreakDate = yesterday;
-      } else {
-        stats.currentStreak = 0;
-        stats.currentStreakDate = null;
-      }
-    }
-    state.stats = stats;
-  }
-
-  function getCurrentStreak() {
-    const today = dayKey();
-    const yesterday = dayKey(addDays(new Date(), -1));
-    const stats = sanitizeStats(state.stats);
-    if (stats.currentStreakDate === today && isDayComplete(today)) return stats.currentStreak;
-    if (stats.currentStreakDate === yesterday && isDayComplete(yesterday)) return stats.currentStreak;
-    let cursor = new Date();
-    if (!isDayComplete(today)) cursor = addDays(cursor, -1);
-    return getStreakEndingAt(dayKey(cursor));
-  }
-
-  // أفضل سلسلة: نمرّ على أيام التخزين المرتبة ونعيد أبعد امتداد
-  // متتالٍ (فرق يوم واحد بين يومَين مكتملَين)؛ أي يوم ناقص يبدأ عدّاً جديداً.
-  function getBestStreak() {
-    const dateKeys = Object.keys(state.days).sort();
-    let best = 0;
-    let run = 0;
-    let previous = null;
-    dateKeys.forEach((dateKey) => {
-      if (!isDayComplete(dateKey)) { run = 0; previous = dateKey; return; }
-      run = previous && dayDifference(previous, dateKey) === 1 ? run + 1 : 1;
-      previous = dateKey;
-      best = Math.max(best, run);
-    });
-    return Math.max(best, sanitizeStats(state.stats).bestStreak);
-  }
-
-  function getWeekSummary() {
-    const summary = { complete: 0, morning: 0, evening: 0 };
-    const today = new Date();
-    for (let offset = 6; offset >= 0; offset -= 1) {
-      const completed = completionSnapshot(dayKey(addDays(today, -offset)));
-      if (completed.morning) summary.morning += 1;
-      if (completed.evening) summary.evening += 1;
-      if (completed.morning && completed.evening) summary.complete += 1;
-    }
-    return summary;
-  }
-
-  function calendarDot(isOn, isGold = false) {
-    const dot = document.createElement("span");
-    dot.className =
-      "calendar-dot" + (isOn ? " is-on" : "") + (isGold ? " is-gold" : "");
-    return dot;
-  }
-
-  /**
-   * وصف خلية التقويم لقارئ الشاشة: التاريخ ثم حالة كل قسم بكلمة كاملة.
-   * @param {Date} date
-   * @param {{ [period: string]: boolean }} completed
-   * @param {boolean} isFuture
-   * @returns {string}
-   */
-  function calendarDayLabel(date, completed, isFuture) {
-    const status = isFuture
-      ? "لم يأت بعد"
-      : [
-          `الصباح ${completed.morning ? "مكتمل" : "غير مكتمل"}`,
-          `المساء ${completed.evening ? "مكتمل" : "غير مكتمل"}`,
-          `أذكار الاستيقاظ ${completed.wake ? "مكتملة" : "غير مكتملة"}`,
-          `أذكار النوم ${completed.sleep ? "مكتملة" : "غير مكتملة"}`,
-        ].join("، ");
-    return `${formatWeekday(date)} ${toArabicNumber(date.getDate())} ${formatMonthLabel(date)}: ${status}`;
-  }
-
-  function renderCalendarDetail() {
-    const dateKey = selectedCalendarKey;
-    if (!dateKey) {
-      elements.calendarDetail.textContent = "";
-      return;
-    }
-    const date = parseDateKey(dateKey);
-    if (dateKey > dayKey()) {
-      elements.calendarDetail.textContent = "";
-      return;
-    }
-    if (!state.days[dateKey]) {
-      elements.calendarDetail.textContent =
-        `${formatWeekday(date)} ${toArabicNumber(date.getDate())} ${formatMonthLabel(date)} — لا يوجد تقدم مسجل.`;
-      return;
-    }
-    const counts = countAllSections(dateKey);
-    elements.calendarDetail.textContent =
-      `${formatWeekday(date)} ${toArabicNumber(date.getDate())} ${formatMonthLabel(date)} — ` +
-      `الصباح ${toArabicNumber(counts.morning)}/${toArabicNumber(SECTIONS.morning.items.length)}، ` +
-      `أذكار الاستيقاظ ${toArabicNumber(counts.wake)}/${toArabicNumber(SECTIONS.wake.items.length)}، ` +
-      `المساء ${toArabicNumber(counts.evening)}/${toArabicNumber(SECTIONS.evening.items.length)}، ` +
-      `أذكار النوم ${toArabicNumber(counts.sleep)}/${toArabicNumber(SECTIONS.sleep.items.length)}.`;
-  }
-
-  // اختيار يوم في التقويم: نحدّث الصنف والحالة في الخلايا القائمة بدل إعادة بناء الشبكة.
-  /**
-   * @param {string} dateKey
-   * @returns {void}
-   */
-  function selectCalendarDay(dateKey) {
-    selectedCalendarKey = dateKey;
-    const dayCells = /** @type {NodeListOf<HTMLButtonElement>} */ (
-      elements.calendarGrid.querySelectorAll(".calendar-day")
-    );
-    dayCells.forEach((dayCell) => {
-      if (!dayCell.dataset.key) return;
-      const isSelected = dayCell.dataset.key === dateKey;
-      dayCell.classList.toggle("is-selected", isSelected);
-      dayCell.setAttribute("aria-pressed", String(isSelected));
-    });
-    renderCalendarDetail();
-  }
-
-  /**
-   * يبني خلية يوم واحد في شبكة التقويم: الرقم، نقطتا الحالة، والوصف لقارئ الشاشة.
-   * @param {Date} date
-   * @param {string} todayKey
-   * @returns {HTMLButtonElement}
-   */
-  function buildCalendarCell(date, todayKey) {
-    const dateKey = dayKey(date);
-    const isFuture = dateKey > todayKey;
-    const completed = completionSnapshot(dateKey);
-    const bothDone = completed.morning && completed.evening;
-    const partial = (completed.morning || completed.evening) && !bothDone;
-
-    const cell = document.createElement("button");
-    cell.type = "button";
-    cell.className = "calendar-day";
-    if (isFuture) cell.classList.add("is-future");
-    if (dateKey === todayKey) cell.classList.add("is-today");
-    if (dateKey === selectedCalendarKey) cell.classList.add("is-selected");
-    if (bothDone) cell.classList.add("is-complete");
-    else if (partial) cell.classList.add("is-partial");
-    cell.dataset.key = dateKey;
-    cell.disabled = isFuture;
-    cell.setAttribute("aria-label", calendarDayLabel(date, completed, isFuture));
-    cell.setAttribute("aria-pressed", String(dateKey === selectedCalendarKey));
-
-    const number = document.createElement("span");
-    number.textContent = toArabicNumber(date.getDate());
-
-    const dots = document.createElement("span");
-    dots.className = "calendar-dots";
-    dots.setAttribute("aria-hidden", "true");
-    dots.append(
-      calendarDot(completed.morning, completed.wake),
-      calendarDot(completed.evening, completed.sleep)
-    );
-
-    cell.append(number, dots);
-    cell.addEventListener("click", () => selectCalendarDay(dateKey));
-    return cell;
-  }
-
-  function renderCalendar() {
-    const today = new Date();
-    const todayKey = dayKey(today);
-    const currentMonth = startOfMonth(today);
-    const oldestKey = Object.keys(state.days).sort()[0];
-    const minMonth = oldestKey ? startOfMonth(parseDateKey(oldestKey)) : currentMonth;
-
-    if (calendarMonth < minMonth) calendarMonth = new Date(minMonth);
-    if (calendarMonth > currentMonth) calendarMonth = new Date(currentMonth);
-
-    elements.calendarMonth.textContent = formatMonthLabel(calendarMonth);
-    elements.calendarPrev.disabled = calendarMonth <= minMonth;
-    elements.calendarNext.disabled = calendarMonth >= currentMonth;
-
-    const year = calendarMonth.getFullYear();
-    const month = calendarMonth.getMonth();
-    const firstWeekday = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const cells = [];
-
-    for (let index = 0; index < firstWeekday; index += 1) {
-      const blank = document.createElement("span");
-      blank.className = "calendar-day is-empty";
-      blank.setAttribute("aria-hidden", "true");
-      cells.push(blank);
-    }
-
-    for (let day = 1; day <= daysInMonth; day += 1) {
-      cells.push(buildCalendarCell(new Date(year, month, day), todayKey));
-    }
-
-    elements.calendarGrid.replaceChildren(...cells);
-    renderCalendarDetail();
-  }
-
-  function renderInsights() {
-    const todayComplete = isDayComplete(dayKey());
-    elements.streakCurrent.textContent = toArabicNumber(getCurrentStreak());
-    elements.streakBest.textContent = toArabicNumber(getBestStreak());
-    elements.streakNote.textContent = todayComplete ? "" : "أكمل اليوم للحفاظ عليها";
-
-    const week = getWeekSummary();
-    elements.weeklySummary.textContent =
-      `هذا الأسبوع: ${toArabicNumber(week.complete)}/٧ أيام كاملة · ` +
-      `الصباح ${toArabicNumber(week.morning)}/٧ · المساء ${toArabicNumber(week.evening)}/٧`;
-
-    renderCalendar();
-  }
-
-  // مؤقتات الاحتفال مفتاحها الشريط نفسه، لأن شريطي القسم والمكمّل قد يحتفلان معاً.
-  const celebrationTimers = new Map();
-
-  // يشغّل حركة الاحتفال على شريط معيّن ثم يزيل الصنف بعد مهلته.
-  // قراءة offsetWidth تجبر المتصفح على إعادة الحساب، فتبدأ الحركة من صفر
-  // ولو كان الصنف مضافاً قبل لحظات.
-  /**
-   * @param {HTMLElement} bar
-   * @param {string} message
-   * @returns {void}
-   */
-  function playCelebration(bar, message) {
-    bar.classList.remove("is-celebrating");
-    void bar.offsetWidth;
-    bar.classList.add("is-celebrating");
-    clearTimeout(celebrationTimers.get(bar));
-    celebrationTimers.set(
-      bar,
-      setTimeout(() => {
-        bar.classList.remove("is-celebrating");
-        celebrationTimers.delete(bar);
-      }, CELEBRATION_MS)
-    );
-    announce(message);
-  }
-
-  // هل توجد نافذة عدّاد معروضة الآن؟ نتحقق من الخاصية open ومن السمة معاً
-  // لأن المتصفحات التي لا تدعم <dialog> تعرضها بالسمة وحدها.
-  /**
-   * @returns {boolean}
-   */
-  function isCounterOpen() {
-    const dialog = elements.counterDialog;
-    return Boolean(dialog && (dialog.open === true || dialog.hasAttribute("open")));
-  }
-
-  function celebrate(section) {
-    // إن كانت نافذة العدّاد مفتوحة نؤجل الاحتفال إلى الإغلاق،
-    // حتى لا تختفي الحركة خلف التعتيم دون أن يراها المستخدم.
-    if (isCounterOpen()) {
-      pendingCelebration = section;
-      return;
-    }
-    playCelebration(elements.progressBar, `أكملت ${section.name} كاملة`);
-  }
-
-  function celebrateSupplement(supplement) {
-    if (isCounterOpen()) {
-      pendingSupplementCelebration = supplement;
-      return;
-    }
-    playCelebration(
-      elements.supplementBar,
-      supplement.period === "wake"
-        ? "أكملت أذكار الاستيقاظ — أصبح صباحك ذهبياً"
-        : "أكملت أذكار النوم — أصبح مساؤك ذهبياً"
-    );
-  }
-
-  /* ===== العدّاد الكبير ===== */
-  // مزامنة النافذة مع تقدم الذكر المفتوح فيها: الرقم، الشريط،
-  // وحالات زرّي العدّ والإعادة.
-  function updateCounterUI() {
-    const controller = counterKey ? itemControllers.get(counterKey) : null;
-    if (!controller) return;
-    const progress = controller.getProgress();
-    const item = controller.item;
-    const complete = isItemComplete(item, progress);
-
-    elements.counterCount.textContent =
-      `${toArabicNumber(progress.count)} من ${toArabicNumber(item.count)}`;
-    elements.counterFill.style.width = item.count
-      ? `${Math.min(100, (progress.count / item.count) * 100)}%`
-      : "0%";
-    elements.counterButton.textContent = complete ? "تم ✓" : "عدّ";
-    elements.counterButton.disabled = complete;
-    elements.counterReset.disabled = !hasProgress(progress);
-    if (elements.counterReset.disabled) disarmCounterReset();
-  }
-
-  // إعادة زر الإعادة من حالة التأكيد إلى حالته العادية (انتهت مهلتها
-  // أو تم الإلغاء) — تُستدعى في كل فتح للنافذة وكل ضغطة عدّ.
-  function disarmCounterReset() {
-    counterResetArmed = false;
-    clearTimeout(counterResetTimer);
-    counterResetTimer = null;
-    elements.counterReset.textContent = "إعادة العدّ";
-    elements.counterReset.classList.remove("is-confirming");
-  }
-
-  // فتح نافذة العدّاد لذكر معين: نسخ نصه إليها، تثبيت من فتحها
-  // لإعادة التركيز إليه لاحقاً، ثم إظهارها بـ <dialog> إن توفر.
-  /**
-   * @param {string} entryKey
-   * @param {HTMLElement} opener
-   * @returns {void}
-   */
-  function openCounter(entryKey, opener) {
-    const controller = itemControllers.get(entryKey);
-    if (!controller || !elements.counterDialog || isCounterOpen()) return;
-
-    counterKey = entryKey;
-    counterOpener = opener;
-    elements.counterTitle.textContent = controller.item.title;
-    elements.counterText.replaceChildren();
-    appendDhikrText(elements.counterText, controller.item);
-    disarmCounterReset();
-    updateCounterUI();
-    document.body.classList.add("is-dialog-open");
-
-    if (typeof elements.counterDialog.showModal === "function") {
-      elements.counterDialog.showModal();
-    } else {
-      elements.counterDialog.setAttribute("open", "");
-    }
-    elements.counterButton.focus({ preventScroll: true });
-  }
-
-  // تنظيف بعد إغلاق النافذة: إعادة التركيز إلى الزر الفاتح،
-  // وتنفيذ أي احتفال كان مؤجلاً خلفها.
-  function handleCounterClosed() {
-    document.body.classList.remove("is-dialog-open");
-    counterKey = null;
-    disarmCounterReset();
-
-    const opener = counterOpener;
-    counterOpener = null;
-    if (opener && opener.isConnected) opener.focus({ preventScroll: true });
-
-    if (pendingCelebration) {
-      const section = pendingCelebration;
-      pendingCelebration = null;
-      celebrate(section);
-    }
-
-    if (pendingSupplementCelebration) {
-      const supplement = pendingSupplementCelebration;
-      pendingSupplementCelebration = null;
-      celebrateSupplement(supplement);
-    }
-  }
-
-  function closeCounter(options = {}) {
-    if (options.celebratePending === false) {
-      pendingCelebration = null;
-      pendingSupplementCelebration = null;
-    }
-    const dialog = elements.counterDialog;
-    if (!dialog || !isCounterOpen()) return;
-
-    if (typeof dialog.close === "function") {
-      dialog.close();
-      return;
-    }
-
-    // متصفحات قديمة لا تدعم <dialog>: نزيل السمة وننفّذ نفس التنظيف يدوياً.
-    dialog.removeAttribute("open");
-    handleCounterClosed();
-  }
-
-  elements.counterButton.addEventListener("click", () => {
-    const controller = counterKey ? itemControllers.get(counterKey) : null;
-    if (!controller) return;
-    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
-      try {
-        navigator.vibrate(10);
-      } catch (error) {
-        // الاهتزاز اختياري وغير مدعوم في بعض المتصفحات.
-      }
-    }
-    disarmCounterReset();
-    controller.increment();
-    updateCounterUI();
-  });
-
-  elements.counterReset.addEventListener("click", () => {
-    const controller = counterKey ? itemControllers.get(counterKey) : null;
-    if (!controller) return;
-
-    // إعادة العدّ بخطوتين: أول ضغطة تفعّل التأكيد لمدة 4 ثوانٍ،
-    // والثانية خلالها هي التي تمسح العدّ فعلاً.
-    if (!counterResetArmed) {
-      counterResetArmed = true;
-      elements.counterReset.textContent = "اضغط مرة أخرى للتأكيد";
-      elements.counterReset.classList.add("is-confirming");
-      clearTimeout(counterResetTimer);
-      counterResetTimer = setTimeout(disarmCounterReset, CONFIRM_WINDOW_MS);
-      return;
-    }
-
-    disarmCounterReset();
-    controller.reset();
-    updateCounterUI();
-  });
-
-  elements.counterClose.addEventListener("click", () => closeCounter());
-  elements.counterDialog.addEventListener("click", (event) => {
-    if (event.target === elements.counterDialog) closeCounter();
-  });
-  elements.counterDialog.addEventListener("close", handleCounterClosed);
-
-  /* ===== الإعلانات لقارئ الشاشة ===== */
-  // منطقة aria-live: تغيير نصها يُعلن تلقائياً دون تحريك التركيز.
-  /**
-   * @param {string} message
-   * @returns {void}
-   */
-  function announce(message) {
-    elements.live.textContent = message;
-  }
-
-  /* ===== الوقت المتبقي في النافذة ===== */
-  // صياغة عربية سليمة للعدد: واحد/اثنان/٣-١٠ جمع/أكثر من عشرة مفرد.
-  function formatUnit(value, one, two, many) {
-    if (value === 1) return one;
-    if (value === 2) return two;
-    if (value >= 3 && value <= 10) return `${toArabicNumber(value)} ${many}`;
-    return `${toArabicNumber(value)} ${one}`;
-  }
-
-  /**
-   * @param {number} milliseconds
-   * @returns {string}
-   */
-  function formatDuration(milliseconds) {
-    const totalMinutes = Math.max(1, Math.ceil(milliseconds / 60000));
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    const parts = [];
-
-    if (hours > 0) parts.push(formatUnit(hours, "ساعة", "ساعتان", "ساعات"));
-    if (minutes > 0) parts.push(formatUnit(minutes, "دقيقة", "دقيقتان", "دقائق"));
-
-    return parts.join(" و");
-  }
-
-  /**
-   * @param {string} period
-   * @param {Date} now
-   * @returns {string}
-   */
-  function describePeriodTime(period, now) {
-    // نافذة المساء تعبر منتصف الليل (15:00 -> 04:00)، فنميّز الحالة
-    // المغلِفة: داخل النافذة قبل أو بعد منتصف الليل، ونحسب النهاية
-    // في اليوم التالي إن لزم، وإلا نعلن موعد البداية القادمة.
-    const range = PERIOD_WINDOWS[period];
-    const hour = now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
-    const wraps = range.end <= range.start;
-    const inside = wraps
-      ? hour >= range.start || hour < range.end
-      : hour >= range.start && hour < range.end;
-
-    if (inside) {
-      const end = new Date(now);
-      if (wraps && hour >= range.start) end.setDate(end.getDate() + 1);
-      end.setHours(range.end, 0, 0, 0);
-      return `المتبقي: ${formatDuration(end.getTime() - now.getTime())}`;
-    }
-
-    if (period === "morning" && hour >= range.end) {
-      return "انتهى الوقت المفضل لأذكار الصباح، ويمكنك الإتيان بها";
-    }
-
-    const start = new Date(now);
-    start.setHours(range.start, 0, 0, 0);
-    if (start <= now) start.setDate(start.getDate() + 1);
-
-    const name = period === "morning" ? "أذكار الصباح" : "أذكار المساء";
-    return `يبدأ وقت ${name} بعد ${formatDuration(start.getTime() - now.getTime())}`;
-  }
-
-  function updateTimeLeft() {
-    elements.timeLeft.textContent = describePeriodTime(activePeriod, new Date());
-  }
-
-  /* ===== الانتقال إلى أول ذكر غير مكتمل ===== */
-  // التمرير السلس إلى أول ذكر ناقص مع إبرازه وإعطاء زر تسجيله
-  // التركيز؛ من طلب تقليل الحركة يُمرَّر فوراً بلا سلاسة.
-  function goToNextIncomplete() {
-    const section = SECTIONS[activePeriod];
-    const record = getDay(dayKey())[activePeriod];
-    const index = section.items.findIndex(
-      (item) => !isItemComplete(item, record[itemKey(activePeriod, item)])
-    );
-    if (index === -1) return;
-
-    const controller = itemControllers.get(itemKey(activePeriod, section.items[index]));
-    if (!controller) return;
-
-    const reduceMotion =
-      typeof window !== "undefined" &&
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-    controller.element.scrollIntoView({
-      behavior: reduceMotion ? "auto" : "smooth",
-      block: "center",
-    });
-    controller.element.classList.add("is-highlighted");
-    controller.focusPill();
-
-    clearTimeout(highlightTimer);
-    highlightTimer = setTimeout(() => {
-      controller.element.classList.remove("is-highlighted");
-    }, HIGHLIGHT_MS);
-  }
-
-  /* ===== التراجع عن آخر إجراء ===== */
-  // شريط التراجع يحتفظ بنسخة «قبل» من الإدخال؛ إن لم يُلغَ خلال
-  // 5 ثوانٍ يختفي ويُنسى الإجراء.
-  /**
-   * @param {string} entryKey
-   * @param {string} title
-   * @param {DayEntry} before
-   * @param {string} actionLabel
-   * @returns {void}
-   */
-  function showUndo(entryKey, title, before, actionLabel) {
-    lastAction = { entryKey, title, before };
-    elements.undoText.textContent = `${actionLabel}: ${title}`;
-    elements.undoBar.hidden = false;
-    clearTimeout(undoTimer);
-    undoTimer = setTimeout(hideUndo, UNDO_VISIBLE_MS);
-  }
-
-  function hideUndo() {
-    clearTimeout(undoTimer);
-    undoTimer = null;
-    lastAction = null;
-    elements.undoBar.hidden = true;
-  }
-
-  function performUndo() {
-    if (!lastAction) return;
-
-    const action = lastAction;
-    const controller = itemControllers.get(action.entryKey);
-    hideUndo();
-    if (!controller) return;
-
-    controller.applyProgress(action.before);
-    updateProgress();
-    announce(`تم التراجع عن: ${action.title}`);
-  }
-
-  /* ===== النسخ الاحتياطي ===== */
-  // رسائل الحالة تنطق بلون الخطأ عند الفشل (is-error) وإلا بلون عادي.
-  /**
-   * @param {string} message
-   * @param {boolean} [isError]
-   * @returns {void}
-   */
-  function setBackupStatus(message, isError = false) {
-    elements.backupStatus.textContent = message;
-    elements.backupStatus.classList.toggle("is-error", isError);
-  }
-
-  function formatDayCount(days) {
-    if (days <= 0) return "اليوم";
-    if (days === 1) return "قبل يوم";
-    if (days === 2) return "قبل يومين";
-    if (days <= 10) return `قبل ${toArabicNumber(days)} أيام`;
-    return `قبل ${toArabicNumber(days)} يوماً`;
-  }
-
-  function formatDayTotal(value) {
-    if (value === 0) return "لا أيام";
-    if (value === 1) return "يوم واحد";
-    if (value === 2) return "يومين";
-    if (value <= 10) return `${toArabicNumber(value)} أيام`;
-    return `${toArabicNumber(value)} يوماً`;
-  }
-
-  function describeMergedDays(addedDays) {
-    if (addedDays === 0) return "لم تُضف أيام جديدة";
-    if (addedDays === 1) return "أُضيف يوم جديد";
-    if (addedDays === 2) return "أُضيف يومان جديدان";
-    if (addedDays <= 10) return `أُضيفت ${toArabicNumber(addedDays)} أيام جديدة`;
-    return `أُضيف ${toArabicNumber(addedDays)} يوماً جديداً`;
-  }
-
-  function updateBackupReminder() {
-    if (!settings.lastExportAt) {
-      elements.backupReminder.textContent = "لم تصدّر نسخة احتياطية بعد.";
-      elements.backupReminder.classList.remove("is-warning");
-      return;
-    }
-
-    const exportedAt = Date.parse(settings.lastExportAt);
-    if (Number.isNaN(exportedAt)) {
-      elements.backupReminder.textContent = "لم تصدّر نسخة احتياطية بعد.";
-      elements.backupReminder.classList.remove("is-warning");
-      return;
-    }
-
-    const days = Math.max(0, Math.floor((Date.now() - exportedAt) / MS_PER_DAY));
-    if (days >= BACKUP_REMINDER_DAYS) {
-      elements.backupReminder.textContent =
-        `آخر نسخة ${formatDayCount(days)} — يُنصح بتصدير نسخة جديدة.`;
-      elements.backupReminder.classList.add("is-warning");
-    } else {
-      elements.backupReminder.textContent = `آخر نسخة: ${formatDayCount(days)}.`;
-      elements.backupReminder.classList.remove("is-warning");
-    }
-  }
-
-  // التحقق من أن التاريخ حقيقي فعلاً: "2026-02-30" يطابق النمط لكن
-  // Date يلفه إلى مارس، فنقارن المكونات بعد الإنشاء لتكتشف هذا.
-  /**
-   * @param {string} dateKey
-   * @returns {boolean}
-   */
-  function isRealDateKey(dateKey) {
-    const [year, month, day] = dateKey.split("-").map(Number);
-    const date = new Date(year, month - 1, day);
-    return (
-      date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day
-    );
-  }
-
-  /**
-   * @param {string} dateKey
-   * @returns {string}
-   */
-  function formatBackupDate(dateKey) {
-    if (!formatters.backupDate) return dateKey;
-    const [year, month, day] = dateKey.split("-").map(Number);
-    return formatters.backupDate.format(new Date(year, month - 1, day));
-  }
-
-  // ملف النسخة يمر على نفس دوال التطهير (sanitizeDays + normalizeSettings)
-  // فلا يدخل التخزين منه شيء غير متوقع، ولو كان مشيناً بالكامل.
-  /**
-   * @param {any} raw
-   * @returns {BackupFileResult}
-   */
-  function validateBackup(raw) {
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-      return { ok: false, reason: "بنية الملف غير صالحة." };
-    }
-    if (Number(raw.schemaVersion || raw.version || 1) > STATE_SCHEMA_VERSION) {
-      return { ok: false, reason: "هذه النسخة الاحتياطية أحدث من إصدار التطبيق الحالي." };
-    }
-    if (!raw.days || typeof raw.days !== "object" || Array.isArray(raw.days)) {
-      return { ok: false, reason: "الملف لا يحتوي بيانات أذكار." };
-    }
-
-    const days = sanitizeDays(raw.days);
-    const dayCount = Object.keys(days).length;
-
-    return {
-      ok: true,
-      days,
-      settings: normalizeSettings(raw.settings),
-      stats: sanitizeStats(raw.stats),
-      dayCount,
-      lastDate: Object.keys(days).sort().slice(-1)[0] || null,
-    };
-  }
-
-  // تنزيل ملف عبر رابط object-URL مؤقت: ننشئ العنصر ديناميكياً ثم
-  // ننظّف الرابط بعدها حتى لا يتسرب الذاكرة.
-  /**
-   * @param {string} content
-   * @param {string} filename
-   * @param {string} type
-   * @returns {void}
-   */
-  function downloadFile(content, filename, type) {
-    const blob = new Blob([content], { type });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.append(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), DOWNLOAD_URL_TTL_MS);
-  }
-
-  function exportBackup() {
-    settings.lastExportAt = new Date().toISOString();
-    saveSettings();
-    updateBackupReminder();
-
-    const payload = {
-      app: "adkar",
-      version: STATE_SCHEMA_VERSION,
-      schemaVersion: STATE_SCHEMA_VERSION,
-      exportedAt: settings.lastExportAt,
-      days: state.days,
-      stats: sanitizeStats(state.stats),
-      settings: { ...settings },
-    };
-
-    downloadFile(
-      JSON.stringify(payload, null, 2),
-      `adkar-${dayKey()}.json`,
-      "application/json"
-    );
-
-    const dayCount = Object.keys(state.days).length;
-    setBackupStatus(
-      dayCount === 0
-        ? "تم تصدير نسخة فارغة."
-        : `تم تصدير نسخة تحتوي ${formatDayTotal(dayCount)}.`
-    );
-  }
-
-  // حماية خلية CSV: من يضمّن فاصلة أو اقتباساً أو سطراً جديداً يُغلف
-  // بعلامات تنصيص مع مضاعفة كل اقتباس داخلي. والقيمة التي تبدأ بـ = + - @
-  // نسبقها بعلامة تنصيص مفردة كي لا يفسرها جدول البيانات كصيغة تنفَّذ.
-  function csvCell(value) {
-    let text = String(value);
-    if (/^[=+\-@]/.test(text)) text = "'" + text;
-    return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-  }
-
-  function exportCsv() {
-    const dateKeys = Object.keys(state.days).sort();
-    if (dateKeys.length === 0) {
-      setBackupStatus("لا توجد بيانات لتصديرها بعد.", true);
-      return;
-    }
-
-    const rows = [
-      [
-        "التاريخ",
-        "اكتمل الصباح",
-        "أذكار الصباح المكتملة",
-        "أذكار الاستيقاظ المكتملة",
-        "اكتمل المساء",
-        "أذكار المساء المكتملة",
-        "أذكار النوم المكتملة",
-        "اكتمل اليوم",
-      ],
-    ];
-
-    dateKeys.forEach((dateKey) => {
-      const counts = countAllSections(dateKey);
-      const completed = completionSnapshot(dateKey);
-      rows.push([
-        dateKey,
-        completed.morning ? "نعم" : "لا",
-        `${counts.morning}/${SECTIONS.morning.items.length}`,
-        `${counts.wake}/${SECTIONS.wake.items.length}`,
-        completed.evening ? "نعم" : "لا",
-        `${counts.evening}/${SECTIONS.evening.items.length}`,
-        `${counts.sleep}/${SECTIONS.sleep.items.length}`,
-        completed.morning && completed.evening ? "نعم" : "لا",
-      ]);
-    });
-
-    // BOM في بداية الملف يجعل Excel يقرأه UTF-8 فتظهر العربية سليمة.
-    const csv =
-      "\uFEFF" + rows.map((row) => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
-
-    downloadFile(csv, `adkar-${dayKey()}.csv`, "text/csv;charset=utf-8");
-    setBackupStatus(`تم تصدير ${formatDayTotal(dateKeys.length)} إلى CSV.`);
-  }
-
-  /* ===== النسخ الاحتياطي: قراءة ملف الاستيراد ومعاينته قبل الدمج أو الاستبدال ===== */
-  /**
-   * @param {File | undefined} file
-   * @returns {void}
-   */
-  function handleImportFile(file) {
-    if (!file) return;
-
-    if (file.size > MAX_BACKUP_BYTES) {
-      elements.importFile.value = "";
-      setBackupStatus("الملف كبير جداً (الحد ٢ ميجابايت).", true);
-      return;
-    }
-
-    file
-      .text()
-      .then((text) => {
-        let parsed;
-        try {
-          parsed = JSON.parse(text);
-        } catch (error) {
-          throw new Error("الملف ليس ملف JSON صالحاً.");
-        }
-
-        const result = validateBackup(parsed);
-        if (result.ok === false) throw new Error(result.reason);
-
-        pendingImport = result;
-        elements.importSummary.textContent = result.dayCount === 0
-          ? "الملف لا يحتوي أيام مسجلة. «دمج» لن يغيّر شيئاً، و«استبدال» سيمسح كل تقدمك الحالي."
-          : `الملف يحتوي ${formatDayTotal(result.dayCount)}، آخرها ${formatBackupDate(
-              result.lastDate
-            )}. «دمج» يحتفظ بالعدد الأكبر لكل ذكر ويبقي إعداداتك، و«استبدال» يمسح كل ما لديك.`;
-        elements.importConfirm.hidden = false;
-        setBackupStatus("");
-      })
-      .catch((error) => {
-        pendingImport = null;
-        elements.importConfirm.hidden = true;
-        elements.importFile.value = "";
-        setBackupStatus(error.message || "تعذّر قراءة الملف.", true);
-      });
-  }
-
-  // قاعدة الدمج لذكر واحد: لا ينخفض أي عدد أبداً — نأخذ الأكبر بين
-  // الحالي والمستورد؛ والأذكار بلا عدد تكتمل إذا اكتملت في أي جهة.
-  /**
-   * @param {DhikrItem} item
-   * @param {DayEntry} [currentEntry]
-   * @param {DayEntry} [importedEntry]
-   * @returns {DayEntry | null}
-   */
-  function mergeItemEntry(item, currentEntry, importedEntry) {
-    if (!currentEntry && !importedEntry) return null;
-
-    if (item.count === 0) {
-      return {
-        count: 0,
-        done: Boolean(
-          (currentEntry && currentEntry.done) || (importedEntry && importedEntry.done)
-        ),
-      };
-    }
-
-    const currentCount = currentEntry ? currentEntry.count : 0;
-    const importedCount = importedEntry ? importedEntry.count : 0;
-    const count = Math.min(item.count, Math.max(currentCount, importedCount));
-    return { count, done: count >= item.count };
-  }
-
-  /**
-   * @param {DayRecord} currentDay
-   * @param {DayRecord} importedDay
-   * @returns {DayRecord}
-   */
-  function mergeDayRecords(currentDay, importedDay) {
-    const merged = emptyDay();
-
-    Object.keys(SECTIONS).forEach((period) => {
-      const currentRecord = currentDay[period] || {};
-      const importedRecord = importedDay[period] || {};
-
-      SECTIONS[period].items.forEach((item) => {
-        const entryKey = itemKey(period, item);
-        const entry = mergeItemEntry(item, currentRecord[entryKey], importedRecord[entryKey]);
-        if (entry) merged[period][entryKey] = entry;
-      });
-    });
-
-    return merged;
-  }
-
-  /**
-   * @param {Record<string, DayRecord>} currentDays
-   * @param {Record<string, DayRecord>} importedDays
-   * @returns {Record<string, DayRecord>}
-   */
-  function mergeDays(currentDays, importedDays) {
-    const merged = { ...currentDays };
-
-    Object.keys(importedDays).forEach((dateKey) => {
-      merged[dateKey] = currentDays[dateKey]
-        ? mergeDayRecords(currentDays[dateKey], importedDays[dateKey])
-        : importedDays[dateKey];
-    });
-
-    return merged;
-  }
-
-  // دمج ثلاثي للتبويبات: نحتفظ بتغيير محلي إذا لم يغيّر التبويب الآخر
-  // الإدخال نفسه؛ وعند تعارض الإدخال نفسه تكون نسخة التخزين الأحدث هي المرجع.
-  /**
-   * @param {string | null} raw
-   * @returns {ProgressState | null}
-   */
-  function parseStateSnapshot(raw) {
-    if (!raw) return emptyState();
-    try {
-      const parsed = JSON.parse(raw);
-      if (!hasValidStoredShape(parsed) || Number(parsed.schemaVersion || 1) > STATE_SCHEMA_VERSION) return null;
-      return { schemaVersion: STATE_SCHEMA_VERSION, days: sanitizeDays(parsed.days), stats: sanitizeStats(parsed.stats) };
-    } catch (error) {
-      return null;
-    }
-  }
-
-  /**
-   * @param {ProgressState} baseState
-   * @param {ProgressState} localState
-   * @param {ProgressState} remoteState
-   * @returns {ProgressState}
-   */
-  function mergeConcurrentState(baseState, localState, remoteState) {
-    const baseDays = baseState.days || {};
-    const localDays = localState.days || {};
-    const remoteDays = remoteState.days || {};
-    const mergedDays = {};
-    const dayKeys = new Set([...Object.keys(baseDays), ...Object.keys(localDays), ...Object.keys(remoteDays)]);
-    dayKeys.forEach((dayKeyValue) => {
-      const mergedDay = emptyDay();
-      Object.keys(SECTIONS).forEach((period) => {
-        const baseRecord = (baseDays[dayKeyValue] && baseDays[dayKeyValue][period]) || {};
-        const localRecord = (localDays[dayKeyValue] && localDays[dayKeyValue][period]) || {};
-        const remoteRecord = (remoteDays[dayKeyValue] && remoteDays[dayKeyValue][period]) || {};
-        SECTIONS[period].items.forEach((item) => {
-          const entryKey = itemKey(period, item);
-          const baseEntry = baseRecord[entryKey] || null;
-          const localEntry = localRecord[entryKey] || null;
-          const remoteEntry = remoteRecord[entryKey] || null;
-          const localChanged = JSON.stringify(localEntry) !== JSON.stringify(baseEntry);
-          const remoteChanged = JSON.stringify(remoteEntry) !== JSON.stringify(baseEntry);
-          const chosen = localChanged && !remoteChanged ? localEntry : remoteEntry;
-          if (chosen) mergedDay[period][entryKey] = chosen;
-        });
-      });
-      if (Object.keys(SECTIONS).some((period) => Object.keys(mergedDay[period]).length)) {
-        mergedDays[dayKeyValue] = mergedDay;
-      }
-    });
-    return {
-      schemaVersion: STATE_SCHEMA_VERSION,
-      days: sanitizeDays(mergedDays),
-      stats: mergeStats(baseState.stats, localState.stats, remoteState.stats),
-    };
-  }
-
-  function finishImport() {
-    pendingImport = null;
-    elements.importConfirm.hidden = true;
-    elements.importFile.value = "";
-    selectedCalendarKey = dayKey();
-    calendarMonth = startOfMonth(new Date());
-    renderPeriod(activePeriod);
-    updateBackupReminder();
-  }
-
-  function applyImport() {
-    if (!pendingImport) return;
-
-    const imported = pendingImport;
-    // الاستيراد الصريح من المستخدم هو مسار الاسترداد عند فساد التخزين.
-    storageBlocked = false;
-    storageLoadIssue = null;
-    state = { schemaVersion: STATE_SCHEMA_VERSION, days: imported.days, stats: imported.stats };
-    pruneDays();
-    saveState();
-
-    if (imported.settings) {
-      const importedSettings = { ...imported.settings };
-      // تاريخ التصدير يخص هذا الجهاز: لا نمسح تذكيره إن كان الملف لا يحمل تاريخاً.
-      if (!importedSettings.lastExportAt) delete importedSettings.lastExportAt;
-      settings = { ...settings, ...importedSettings };
-      saveSettings();
-      applySettingsToUi();
-    }
-
-    finishImport();
-    setBackupStatus(
-      imported.dayCount === 0
-        ? "تم استبدال التقدم بنسخة لا تحتوي أياماً."
-        : `تم استيراد ${formatDayTotal(imported.dayCount)}.`
-    );
-    announce("تم استيراد النسخة الاحتياطية");
-  }
-
-  function applyMerge() {
-    if (!pendingImport) return;
-
-    const imported = pendingImport;
-    const addedDays = Object.keys(imported.days).filter((dateKey) => !state.days[dateKey]).length;
-
-    // الدمج الصريح يسمح بالاسترداد من نسخة سليمة إذا كان التخزين السابق تالفاً.
-    storageBlocked = false;
-    storageLoadIssue = null;
-    state = { schemaVersion: STATE_SCHEMA_VERSION, days: mergeDays(state.days, imported.days), stats: mergeStats(state.stats, imported.stats) };
-    pruneDays();
-    saveState();
-
-    finishImport();
-    setBackupStatus(
-      imported.dayCount === 0
-        ? "تم دمج النسخة، ولم تحتوِ أياماً فلم يُضف شيء."
-        : `تم دمج ${formatDayTotal(imported.dayCount)} من الملف، ${describeMergedDays(addedDays)}.`
-    );
-    announce("تم دمج النسخة الاحتياطية");
-  }
-
-  /* ===== التبويبات ===== */
-  elements.tablist.addEventListener("click", (event) => {
-    const tab = /** @type {HTMLElement | null} */ (
-      /** @type {Element} */ (event.target).closest(".tab")
-    );
-    if (!tab) return;
-    renderPeriod(tab.dataset.period);
-  });
-
-  // التنقل بلوحة المفاتيح على نمط WAI-ARIA: الأسهم والمنزل والنهاية
-  // في اتجاه RTL — ArrowLeft يتقدم لأن الصفحة من اليمين إلى اليسار.
-  elements.tablist.addEventListener("keydown", (event) => {
-    const order = ["morning", "evening"];
-    const current = order.indexOf(activePeriod);
-    let next = current;
-
-    if (event.key === "ArrowLeft") next = (current + 1) % order.length;
-    else if (event.key === "ArrowRight") next = (current - 1 + order.length) % order.length;
-    else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = order.length - 1;
-    else return;
-
-    event.preventDefault();
-    renderPeriod(order[next]);
-    const nextTab = elements.tabs.find((tab) => tab.dataset.period === order[next]);
-    if (nextTab) nextTab.focus();
-  });
-
-  /* ===== الإعدادات والنسخ الاحتياطي والانتقال والتراجع ===== */
-  elements.fontButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      settings.fontSize = button.dataset.fontSize;
-      saveSettings();
-      applyFontSize();
-      syncSettingsUI();
-      announce("تم تغيير حجم نص الأذكار");
-    });
-  });
-
-  elements.themeButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      settings.theme = button.dataset.theme;
-      saveSettings();
-      applyTheme();
-      syncSettingsUI();
-      announce("تم تغيير الألوان");
-    });
-  });
-
-  elements.nextButton.addEventListener("click", goToNextIncomplete);
-  elements.undoButton.addEventListener("click", performUndo);
-
-  elements.exportButton.addEventListener("click", exportBackup);
-  elements.exportCsvButton.addEventListener("click", exportCsv);
-  elements.importButton.addEventListener("click", () => elements.importFile.click());
-  elements.importFile.addEventListener("change", () => {
-    const file = elements.importFile.files && elements.importFile.files[0];
-    handleImportFile(file);
-  });
-  elements.importApply.addEventListener("click", applyImport);
-  elements.importMerge.addEventListener("click", applyMerge);
-  elements.importCancel.addEventListener("click", () => {
-    pendingImport = null;
-    elements.importConfirm.hidden = true;
-    elements.importFile.value = "";
-    setBackupStatus("");
-  });
-
-  elements.calendarPrev.addEventListener("click", () => {
-    calendarMonth = startOfMonth(addMonths(calendarMonth, -1));
-    selectedCalendarKey = dayKey(calendarMonth);
-    renderCalendar();
-  });
-
-  elements.calendarNext.addEventListener("click", () => {
-    calendarMonth = startOfMonth(addMonths(calendarMonth, 1));
-    selectedCalendarKey = dayKey(calendarMonth);
-    renderCalendar();
-  });
-
-  /* ===== السحب الأفقي بين القسمين ===== */
-  // نتابع اللمس على الصفحة نفسها فقط: لا أزرار ولا حقول ولا التذييل.
-  // عند الإفلات نقبل السحبة إن كانت أفقية بوضوح (طول ≥ 60 بكسل،
-  // أفقي أكبر من عمودي 1.5 مرة)، وبدأت بعيداً عن حواف الشاشة،
-  // وليس أثناء تحديد نص — ثم نبدّل القسم حسب اتجاه السحب.
-  elements.page.addEventListener(
-    "touchstart",
-    (event) => {
-      if (event.touches.length !== 1) return;
-
-      const target = /** @type {Element | null} */ (event.target);
-      if (!target || typeof target.closest !== "function") return;
-      if (target.closest("button, a, input, select, textarea, label")) return;
-      if (target.closest(".site-footer")) return;
-
-      touchStart = {
-        x: event.touches[0].clientX,
-        y: event.touches[0].clientY,
-        time: Date.now(),
-      };
-    },
-    { passive: true }
-  );
-
-  elements.page.addEventListener(
-    "touchend",
-    (event) => {
-      if (!touchStart) return;
-      const start = touchStart;
-      touchStart = null;
-
-      const touch = event.changedTouches[0];
-      if (!touch) return;
-
-      const dx = touch.clientX - start.x;
-      const dy = touch.clientY - start.y;
-      const elapsed = Date.now() - start.time;
-      const selection = window.getSelection ? String(window.getSelection()) : "";
-
-      if (elapsed > SWIPE_MAX_DURATION_MS) return;
-      if (Math.abs(dx) < SWIPE_MIN_DISTANCE_PX) return;
-      if (Math.abs(dx) < Math.abs(dy) * SWIPE_AXIS_RATIO) return;
-      if (start.x < SWIPE_EDGE_MARGIN_PX || start.x > window.innerWidth - SWIPE_EDGE_MARGIN_PX) return;
-      if (selection.length > 0) return;
-
-      const nextPeriod = dx < 0 ? "evening" : "morning";
-      if (nextPeriod !== activePeriod) renderPeriod(nextPeriod);
-    },
-    { passive: true }
-  );
-
-  elements.page.addEventListener(
-    "touchcancel",
-    () => {
-      touchStart = null;
-    },
-    { passive: true }
-  );
-
-  /* ===== إعادة تعيين اليوم (بخطوتين) ===== */
-  // نفس نمط تأكيد العدّاد: أول ضغطة تفعّل التأكيد أربع ثوانٍ،
-  // والثانية خلالها تمسح تقدم اليوم بالكامل.
-  let resetTimer = null;
-
-  function cancelReset() {
-    clearTimeout(resetTimer);
-    resetTimer = null;
-    elements.reset.classList.remove("is-confirming");
-    elements.reset.textContent = "إعادة تعيين اليوم";
-  }
-
-  elements.reset.addEventListener("click", () => {
-    if (!elements.reset.classList.contains("is-confirming")) {
-      elements.reset.classList.add("is-confirming");
-      elements.reset.textContent = "اضغط مرة أخرى للتأكيد";
-      resetTimer = setTimeout(cancelReset, CONFIRM_WINDOW_MS);
-      return;
-    }
-
-    cancelReset();
-    delete state.days[dayKey()];
-    saveState();
-    selectedCalendarKey = dayKey();
-    renderPeriod(activePeriod);
-    announce("أُعيد تعيين تقدم اليوم");
-  });
-
-  /* ===== تغيّر اليوم أثناء بقاء الصفحة مفتوحة ===== */
-  // إذا مرّ منتصف الليل والصفحة ما زالت مفتوحة نعيد رسم اليوم
-  // الجديد: التاريخ، التقويم، وقوائم الأذكار تُفرغ من تلقاء نفسها.
-  function checkDayChange() {
-    if (renderedDay === dayKey()) return;
-    renderedDay = dayKey();
-    selectedCalendarKey = renderedDay;
-    calendarMonth = startOfMonth(new Date());
-    updateDates();
-    renderPeriod(activePeriod);
-  }
-
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState !== "visible") return;
-    checkDayChange();
-    updateTimeLeft();
-    refreshClockTheme();
-    updateBackupReminder();
-  });
-
-  // فحص خفيف دوري: تغيّر اليوم كل دقيقة، والوقت المتبقي والثيم
-  // المعتمد على الساعة كل 30 ثانية.
-  setInterval(checkDayChange, DAY_CHECK_INTERVAL_MS);
-  setInterval(() => {
-    updateTimeLeft();
-    refreshClockTheme();
-  }, CLOCK_INTERVAL_MS);
-
-  /* ===== المزامنة بين التبويبات ===== */
-  // حدث storage يصل إلى كل التبويبات عدا الذي كتب؛ نعيد القراءة
-  // من الصفر بدل محاولة الدمج، فالمصدر الأحدث هو التخزين نفسه.
-  async function reloadStateFromStorage(nextState) {
-    if (nextState) state = nextState;
-    else {
-      storageBlocked = false;
-      storageLoadIssue = null;
-      state = await loadState();
-    }
-    if (storageBlocked) reportStorageState(false);
-    renderedDay = dayKey();
-    selectedCalendarKey = renderedDay;
-    calendarMonth = startOfMonth(new Date());
-    updateDates();
-    renderPeriod(activePeriod);
-    updateBackupReminder();
-  }
-
-  window.addEventListener("storage", async (event) => {
-    // مسح التخزين من تبويب آخر يصل بحدث مفتاحه null.
-    if (event.key === null) {
-      settings = loadSettings();
-      applySettingsToUi();
-      reloadStateFromStorage();
-      announce("تم تحديث البيانات من تبويب آخر");
-      return;
-    }
-
-    if (event.key === STORAGE_KEY) {
-      const baseState = lastPersistedState || parseStateSnapshot(event.oldValue);
-      storageBlocked = false;
-      storageLoadIssue = null;
-      const remoteState = await loadState();
-      if (storageBlocked) {
-        reportStorageState(false);
-        reloadStateFromStorage(state);
-        announce("تعذّرت مزامنة البيانات لأن التخزين الخارجي تالف");
-        return;
-      }
-      const mergedState = mergeConcurrentState(baseState, state, remoteState);
-      state = mergedState;
-      lastPersistedState = deepCopy(remoteState);
-      // saveState يعيد قراءة الحالة داخل القفل قبل الكتابة، فلا يعتمد على oldValue وحده.
-      if (JSON.stringify(mergedState) !== JSON.stringify(remoteState)) saveState();
-      reloadStateFromStorage(mergedState);
-      announce("تمت مزامنة التقدم من تبويب آخر");
-      return;
-    }
-
-    if (event.key === SETTINGS_KEY) {
-      settings = loadSettings();
-      applySettingsToUi();
-      updateBackupReminder();
-    }
-  });
-
-  /* ===== بدء التشغيل ===== */
-  // بترتيب معتمد: مزامنة أزرار الإعدادات مع ما قرأنا، فحجم الخط،
-  // فالتاريخ، فتذكير النسخة، ثم رسم القسم الذي يناسب الساعة الآن.
-  if (storageBlocked) reportStorageState(false);
-  syncSettingsUI();
-  applyFontSize();
+  cancelReset();
+  delete state.days[dayKey()];
+  saveState();
+  setSelectedCalendarKey(dayKey());
+  renderPeriod(getActivePeriod());
+  announce("أُعيد تعيين تقدم اليوم");
+});
+
+/* ===== تغيّر اليوم أثناء بقاء الصفحة مفتوحة ===== */
+// إذا مرّ منتصف الليل والصفحة ما زالت مفتوحة نعيد رسم اليوم
+// الجديد: التاريخ، التقويم، وقوائم الأذكار تُفرغ من تلقاء نفسها.
+function checkDayChange() {
+  if (renderedDay === dayKey()) return;
+  renderedDay = dayKey();
+  resetCalendarToCurrentMonth();
   updateDates();
+  renderPeriod(getActivePeriod());
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  checkDayChange();
+  updateTimeLeft();
+  refreshClockTheme();
   updateBackupReminder();
-  if (typeof navigator !== "undefined" && navigator.storage && typeof navigator.storage.persist === "function") {
-    navigator.storage.persist().catch(() => { /* تجاهل: غير مدعوم أو مرفوض */ });
+});
+
+// فحص خفيف دوري: تغيّر اليوم كل دقيقة، والوقت المتبقي والثيم
+// المعتمد على الساعة كل 30 ثانية.
+setInterval(checkDayChange, DAY_CHECK_INTERVAL_MS);
+setInterval(() => {
+  updateTimeLeft();
+  refreshClockTheme();
+}, CLOCK_INTERVAL_MS);
+
+/* ===== المزامنة بين التبويبات ===== */
+// حدث storage يصل إلى كل التبويبات عدا الذي كتب؛ نعيد القراءة
+// من الصفر بدل محاولة الدمج، فالمصدر الأحدث هو التخزين نفسه.
+async function reloadStateFromStorage(nextState) {
+  if (nextState) setState(nextState);
+  else {
+    unblockStorage();
+    setState(await loadState());
   }
-  renderPeriod(detectPeriod());
-})();
+  if (isStorageBlocked()) reportStorageState(false);
+  renderedDay = dayKey();
+  resetCalendarToCurrentMonth();
+  updateDates();
+  renderPeriod(getActivePeriod());
+  updateBackupReminder();
+}
+
+window.addEventListener("storage", async (event) => {
+  // مسح التخزين من تبويب آخر يصل بحدث مفتاحه null.
+  if (event.key === null) {
+    reloadSettings();
+    applySettingsToUi();
+    reloadStateFromStorage();
+    announce("تم تحديث البيانات من تبويب آخر");
+    return;
+  }
+
+  if (event.key === STORAGE_KEY) {
+    const baseState = getLastPersistedState() || parseStateSnapshot(event.oldValue);
+    unblockStorage();
+    const remoteState = await loadState();
+    if (isStorageBlocked()) {
+      reportStorageState(false);
+      reloadStateFromStorage(state);
+      announce("تعذّرت مزامنة البيانات لأن التخزين الخارجي تالف");
+      return;
+    }
+    const mergedState = mergeConcurrentState(baseState, state, remoteState);
+    setState(mergedState);
+    setLastPersistedState(remoteState);
+    // saveState يعيد قراءة الحالة داخل القفل قبل الكتابة، فلا يعتمد على oldValue وحده.
+    if (JSON.stringify(mergedState) !== JSON.stringify(remoteState)) saveState();
+    reloadStateFromStorage(mergedState);
+    announce("تمت مزامنة التقدم من تبويب آخر");
+    return;
+  }
+
+  if (event.key === SETTINGS_KEY) {
+    reloadSettings();
+    applySettingsToUi();
+    updateBackupReminder();
+  }
+});
+
+/* ===== بدء التشغيل ===== */
+// بترتيب معتمد: قراءة الحالة، ثم مزامنة أزرار الإعدادات مع ما قرأنا،
+// فحجم الخط، فالتاريخ، فتذكير النسخة، ثم رسم القسم الذي يناسب الساعة الآن.
+setState(await loadState());
+// قاعدة الدمج بين التبويبات تبدأ من النسخة المقروءة نفسها، لا من حالة فارغة.
+setLastPersistedState(state);
+renderedDay = dayKey();
+if (isStorageBlocked()) reportStorageState(false);
+syncSettingsUI();
+applyFontSize();
+updateDates();
+updateBackupReminder();
+if (typeof navigator !== "undefined" && navigator.storage && typeof navigator.storage.persist === "function") {
+  navigator.storage.persist().catch(() => { /* تجاهل: غير مدعوم أو مرفوض */ });
+}
+renderPeriod(detectPeriod());

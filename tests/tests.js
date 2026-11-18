@@ -6,7 +6,41 @@ const vm = require("vm");
 
 const ROOT = path.join(__dirname, "..");
 const read = (name) => fs.readFileSync(path.join(ROOT, name), "utf8");
-const APP_SOURCE = read("app/app.js");
+
+/* وحدات app/modules/*.js صارت ES modules، وتقييمها يحتاج vm.SourceTextModule
+   المتاح خلف علم --experimental-vm-modules فقط. إن لم يكن العلم مفعّلاً نعيد
+   تشغيل هذا الملف نفسه به، فيعمل الأمر `node tests/tests.js` كما هو. */
+if (typeof vm.SourceTextModule !== "function") {
+  if (process.env.ADKAR_VM_MODULES === "1") {
+    console.error("vm.SourceTextModule unavailable; run: node --experimental-vm-modules tests/tests.js");
+    process.exit(1);
+  }
+  const { spawnSync } = require("node:child_process");
+  const relaunch = spawnSync(
+    process.execPath,
+    ["--experimental-vm-modules", __filename],
+    { stdio: "inherit", env: { ...process.env, ADKAR_VM_MODULES: "1" } }
+  );
+  process.exit(relaunch.status === null ? 1 : relaunch.status);
+}
+
+const ENTRY_FILE = path.join(ROOT, "app", "app.js");
+const MODULE_DIR = path.join(ROOT, "app", "modules");
+const MODULE_FILES = fs
+  .readdirSync(MODULE_DIR)
+  .filter((name) => name.endsWith(".js"))
+  .sort()
+  .map((name) => path.join(MODULE_DIR, name));
+const ENTRY_SOURCE = fs.readFileSync(ENTRY_FILE, "utf8");
+const MODULE_SOURCES = MODULE_FILES.map((file) => ({
+  name: path.relative(ROOT, file).replace(/\\/g, "/"),
+  source: fs.readFileSync(file, "utf8"),
+}));
+const readModule = (name) =>
+  (MODULE_SOURCES.find((entry) => entry.name === "app/modules/" + name) || { source: "" }).source;
+// مصدر الدخول والوحدات مجتمعين: فحوص النصوص تبحث عن الرمز حيث انتقل.
+const APP_SOURCE = [ENTRY_SOURCE, ...MODULE_SOURCES.map((entry) => entry.source)].join("\n");
+
 const STORAGE_SOURCE = read("app/storage.js");
 
 // بيانات الأذكار تُقرأ من app/data.js مباشرة: تقييمه في سياق معزول بـ window فارغ،
@@ -47,7 +81,7 @@ function fail(message) {
 /* ===== 1) البنية والملفات ===== */
 (function runStaticChecks() {
   const html = read("index.html");
-  const app = read("app/app.js");
+  const app = APP_SOURCE;
   const themeInit = read("app/theme-init.js");
   const dataSource = read("app/data.js");
   const css = read("app/styles.css");
@@ -55,8 +89,9 @@ function fail(message) {
   const faviconIco = fs.readFileSync(path.join(ROOT, "favicon.ico"));
   const testsSource = fs.readFileSync(__filename, "utf8");
 
-  const pruneBody = app.slice(app.indexOf("function pruneDays"), app.indexOf("function getDay", app.indexOf("function pruneDays")));
-  if (pruneBody.indexOf("updateStreakStats();") >= 0 && pruneBody.indexOf("updateStreakStats();") < pruneBody.indexOf("delete state.days")) pass("streak statistics update before day pruning");
+  const stateSource = readModule("state.js");
+  const pruneBody = stateSource.slice(stateSource.indexOf("function pruneDays"), stateSource.indexOf("function getDay", stateSource.indexOf("function pruneDays")));
+  if (pruneBody.indexOf("updateStreakStats(state);") >= 0 && pruneBody.indexOf("updateStreakStats(state);") < pruneBody.indexOf("delete state.days")) pass("streak statistics update before day pruning");
   else fail("streak statistics must update before day pruning");
 
   if (app.includes('navigator.locks.request("adkar-progress-write"')) pass("cross-tab writes use the Web Locks API");
@@ -83,7 +118,6 @@ function fail(message) {
   [
     ["app/data.js", dataSource],
     ["app/storage.js", STORAGE_SOURCE],
-    ["app/app.js", app],
     ["app/theme-init.js", themeInit],
   ].forEach(([name, source]) => {
     try {
@@ -94,16 +128,28 @@ function fail(message) {
     }
   });
 
+  [{ name: "app/app.js", source: ENTRY_SOURCE }, ...MODULE_SOURCES].forEach(({ name, source }) => {
+    try {
+      new vm.SourceTextModule(source, { identifier: name });
+      pass(`${name}: module syntax OK`);
+    } catch (error) {
+      fail(`${name}: module syntax error -> ${error.message}`);
+    }
+  });
+
   const openBraces = (css.match(/\{/g) || []).length;
   const closeBraces = (css.match(/\}/g) || []).length;
   if (openBraces === closeBraces) pass(`styles.css: ${openBraces} balanced rule blocks`);
   else fail(`styles.css: ${openBraces} "{" but ${closeBraces} "}"`);
 
-  /* دالة حماية خلية CSV تُقيَّم معزولة من مصدر app.js، فتُفحص الحماية من
+  /* دالة حماية خلية CSV تُقيَّم معزولة من وحدتها، فتُفحص الحماية من
      حقن الصيغ والتغليف حتى لو غيّرت صياغة الملف لاحقاً. */
-  const csvCellSource = app.slice(
-    app.indexOf("function csvCell"),
-    app.indexOf("function exportCsv", app.indexOf("function csvCell"))
+  const utilsSource = readModule("utils.js");
+  const csvCellStart = utilsSource.indexOf("function csvCell");
+  const csvCellEnd = utilsSource.indexOf("export function", csvCellStart);
+  const csvCellSource = utilsSource.slice(
+    csvCellStart,
+    csvCellEnd === -1 ? utilsSource.length : csvCellEnd
   );
   try {
     const csvCell = vm.runInNewContext("(" + csvCellSource + ")");
@@ -135,7 +181,7 @@ function fail(message) {
     ['<script src="app/storage.js"></script>', "app/storage.js"],
     ['<script src="app/theme-init.js"></script>', "app/theme-init.js"],
     ['<script src="app/data.js"></script>', "app/data.js"],
-    ['<script src="app/app.js"></script>', "app/app.js"],
+    ['<script type="module" src="app/app.js"></script>', "app/app.js"],
   ].forEach(([needle, name]) => {
     if (html.includes(needle)) pass(`index.html links ${name}`);
     else fail(`index.html does not link ${name}`);
@@ -285,7 +331,6 @@ const root = path.join(__dirname, "..");
 const config = fs.readFileSync(path.join(root, "app", "config.js"), "utf8");
 const themeInit = fs.readFileSync(path.join(root, "app", "theme-init.js"), "utf8");
 const data = fs.readFileSync(path.join(root, "app", "data.js"), "utf8");
-const app = fs.readFileSync(path.join(root, "app", "app.js"), "utf8");
 
 /* ===== DOM مصغّر للاختبار ===== */
 class ClassList {
@@ -733,10 +778,25 @@ vm.runInContext(config, sandbox);
 vm.runInContext(STORAGE_SOURCE, sandbox);
 vm.runInContext(themeInit, sandbox);
 vm.runInContext(data, sandbox);
-const appInitPromise = vm.runInContext(app, sandbox);
-if (appInitPromise && typeof appInitPromise.then === "function") {
-  await appInitPromise;
+
+/* ملفات ES modules تُقرأ من القرص وتُربط ثم تُقيَّم في سياق الصفحة نفسه،
+   فتصل إلى document وlocalStorage مثل السكربتات الكلاسيكية تماماً. */
+const moduleCache = new Map();
+function pageModule(file) {
+  if (moduleCache.has(file)) return moduleCache.get(file);
+  const module = new vm.SourceTextModule(fs.readFileSync(file, "utf8"), {
+    identifier: file,
+    context: sandbox,
+  });
+  moduleCache.set(file, module);
+  return module;
 }
+const linkPageModule = (specifier, referencingModule) =>
+  pageModule(path.resolve(path.dirname(referencingModule.identifier), specifier));
+
+const entryModule = pageModule(path.join(root, "app", "app.js"));
+await entryModule.link(linkPageModule);
+await entryModule.evaluate();
 
 /* ===== أدوات الاختبار ===== */
 
