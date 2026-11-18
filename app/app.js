@@ -1070,6 +1070,37 @@
       remaining === 0 ? `✓ ${section.name}` : `(${toArabicNumber(remaining)}) ${section.name}`;
   }
 
+  // يرسم شريط المجموعة المكمّلة (الاستيقاظ/النوم) ويعيد هل اكتملت الآن،
+  // حتى يبقى updateProgress مسؤولاً عن القسم الأساسي وحده.
+  /**
+   * @param {{ [period: string]: number }} counts
+   * @returns {boolean}
+   */
+  function renderSupplementProgress(counts) {
+    const supplement = SUPPLEMENTS[activePeriod];
+    let justCompletedSupplement = false;
+
+    if (!supplement) return false;
+
+    const supplementTotal = SECTIONS[supplement.period].items.length;
+    const supplementDone = counts[supplement.period];
+    elements.supplementProgress.textContent =
+      supplementDone === supplementTotal
+        ? `أكملت ${supplement.name}`
+        : `أكملت ${toArabicNumber(supplementDone)} من ${toArabicNumber(supplementTotal)}`;
+    elements.supplementFill.style.width = `${(supplementDone / supplementTotal) * 100}%`;
+    elements.supplementBar.setAttribute("aria-valuenow", String(supplementDone));
+    elements.supplementBar.setAttribute("aria-valuemax", String(supplementTotal));
+    elements.supplementBar.setAttribute("aria-label", `تقدم ${supplement.name}`);
+
+    justCompletedSupplement =
+      previousSupplementDone !== null &&
+      supplementDone === supplementTotal &&
+      previousSupplementDone < supplementTotal;
+    previousSupplementDone = supplementDone;
+    return justCompletedSupplement;
+  }
+
   function updateProgress() {
     const section = SECTIONS[activePeriod];
     const total = section.items.length;
@@ -1105,27 +1136,7 @@
 
     updateTabTitle(section, done, total);
 
-    const supplement = SUPPLEMENTS[activePeriod];
-    let justCompletedSupplement = false;
-
-    if (supplement) {
-      const supplementTotal = SECTIONS[supplement.period].items.length;
-      const supplementDone = counts[supplement.period];
-      elements.supplementProgress.textContent =
-        supplementDone === supplementTotal
-          ? `أكملت ${supplement.name}`
-          : `أكملت ${toArabicNumber(supplementDone)} من ${toArabicNumber(supplementTotal)}`;
-      elements.supplementFill.style.width = `${(supplementDone / supplementTotal) * 100}%`;
-      elements.supplementBar.setAttribute("aria-valuenow", String(supplementDone));
-      elements.supplementBar.setAttribute("aria-valuemax", String(supplementTotal));
-      elements.supplementBar.setAttribute("aria-label", `تقدم ${supplement.name}`);
-
-      justCompletedSupplement =
-        previousSupplementDone !== null &&
-        supplementDone === supplementTotal &&
-        previousSupplementDone < supplementTotal;
-      previousSupplementDone = supplementDone;
-    }
+    const justCompletedSupplement = renderSupplementProgress(counts);
 
     const signature = `${counts.morning}:${counts.evening}:${counts.wake}:${counts.sleep}`;
     // التقويم والسلسلة إعادة حساب مكلفة، فلا نحدثهما إلا حين تتغير الأعداد.
@@ -1135,7 +1146,7 @@
     }
 
     if (justCompleted) celebrate(section);
-    if (justCompletedSupplement && supplement) celebrateSupplement(supplement);
+    if (justCompletedSupplement) celebrateSupplement(SUPPLEMENTS[activePeriod]);
   }
 
   /* ===== التقدم: السلسلة والملخص والتقويم ===== */
