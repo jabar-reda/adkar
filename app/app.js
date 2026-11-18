@@ -1,3 +1,4 @@
+// @ts-check
 /* ==========================================================================
    منطق تطبيق «أذكار الصباح والمساء».
    تسلسل الملف: الثوابت، فبيانات الأذكار (نصوصها في app/data.js)، فالأدوات
@@ -106,6 +107,11 @@
     return period + "-" + (hash >>> 0).toString(36);
   }
   const legacyItemKey = (period, index) => period + "-" + index;
+  /**
+   * يطهّر إحصاءات السلسلة من أي مصدر ويعيدها بأرقام صالحة.
+   * @param {any} raw
+   * @returns {StreakStats}
+   */
   const sanitizeStats = (raw) => {
     const best = Number(raw && raw.bestStreak);
     const current = Number(raw && raw.currentStreak);
@@ -121,6 +127,11 @@
     };
   };
 
+  /**
+   * يدمج إحصاءات عدة نسخ بأخذ أفضل سلسلة وأحدث سلسلة حالية.
+   * @param {...any} sources
+   * @returns {StreakStats}
+   */
   function mergeStats(...sources) {
     const values = sources.map(sanitizeStats);
     const bestStreak = Math.max(0, ...values.map((value) => value.bestStreak));
@@ -132,6 +143,7 @@
   }
 
   // بنية يوم فارغ لكل الأقسام الأربعة، تُستخدم كأساس آمن للقراءة والكتابة.
+  /** @returns {DayRecord} */
   const emptyDay = () => ({ morning: {}, evening: {}, wake: {}, sleep: {} });
 
   const addDays = (date, amount) => {
@@ -155,7 +167,7 @@
   const dayDifference = (fromKey, toKey) => {
     const from = parseDateKey(fromKey);
     const to = parseDateKey(toKey);
-    return Math.round((to - from) / 86400000);
+    return Math.round((to.getTime() - from.getTime()) / 86400000);
   };
 
   // اكتمال اليوم = إتمام الصباح والمساء معاً؛ الأقسام المكمّلة لا تدخل فيه.
@@ -164,8 +176,12 @@
   }
 
   /* ===== الحالة والتخزين ===== */
-  // يبني نسخة نظيفة آمنة من بيانات يوم واحد: يتجاهل المفاتيح المجهولة،
-  // ويقصّ كل عدّ داخل حدود العدد المطلوب، فلا تفسد بيانات خارجية الواجهة.
+  /**
+   * يبني نسخة نظيفة آمنة من بيانات يوم واحد: يتجاهل المفاتيح المجهولة،
+   * ويقصّ كل عدّ داخل حدود العدد المطلوب، فلا تفسد بيانات خارجية الواجهة.
+   * @param {any} source
+   * @returns {DayRecord}
+   */
   function sanitizeDayRecord(source) {
     const day = emptyDay();
     if (!source || typeof source !== "object" || Array.isArray(source)) return day;
@@ -216,7 +232,13 @@
     );
   }
 
+  /**
+   * يرشّح مفاتيح الأيام ويبقي أحدث KEEP_DAYS يوماً فقط.
+   * @param {any} rawDays
+   * @returns {Record<string, DayRecord>}
+   */
   function sanitizeDays(rawDays) {
+    /** @type {Record<string, DayRecord>} */
     const days = {};
     if (!rawDays || typeof rawDays !== "object" || Array.isArray(rawDays)) return days;
     const today = dayKey();
@@ -225,7 +247,7 @@
       .filter((key) => /^\d{4}-\d{2}-\d{2}$/.test(key) && isRealDateKey(key) && key <= today)
       .sort()
       .slice(-(KEEP_DAYS + 1));
-    const sanitized = {};
+    const sanitized = /** @type {Record<string, DayRecord>} */ ({});
     candidates.forEach((key) => {
       const day = sanitizeDayRecord(rawDays[key]);
       if (Object.keys(SECTIONS).some((period) => Object.keys(day[period]).length > 0)) sanitized[key] = day;
@@ -244,12 +266,14 @@
   }
 
   // قراءة متزامنة من localStorage لأغراض الترحيل فقط (إصدارات APK القديمة).
+  /** @returns {string | null} */
   function readLegacyLocalStorage() {
     try { return localStorage.getItem(STORAGE_KEY); }
     catch (error) { return null; }
   }
 
   // لا نعامل البيانات التالفة كحالة فارغة؛ نوقف الكتابة كي لا نمحو الأصل.
+  /** @returns {ProgressState | Promise<ProgressState>} */
   function loadState() {
     if (ADKAR_STORAGE.isNative) {
       return ADKAR_STORAGE.get(STORAGE_KEY).then((raw) => {
@@ -275,6 +299,11 @@
     }
   }
 
+  /**
+   * يقرأ JSON المخزَّن ويطبّق التحقق والتطهير، ويوقف الحفظ عند التلف.
+   * @param {string | null} raw
+   * @returns {ProgressState}
+   */
   function parseLoadedState(raw) {
     try {
       if (!raw) return { schemaVersion: STATE_SCHEMA_VERSION, days: {}, stats: { bestStreak: 0 } };
@@ -311,6 +340,7 @@
   }
 
   // يطبّق قواعد الحفظ المشتركة على الحالة ويعيد لقطة عميقة جاهزة للكتابة.
+  /** @returns {ProgressState} */
   function prepareStateSnapshot() {
     state.schemaVersion = STATE_SCHEMA_VERSION;
     updateStreakStats();
@@ -319,6 +349,7 @@
     return JSON.parse(JSON.stringify(state));
   }
 
+  /** @returns {Promise<boolean>} */
   async function saveState() {
     if (storageBlocked) { reportStorageState(false); return false; }
     const localSnapshot = prepareStateSnapshot();
@@ -395,6 +426,10 @@
     }
   }
 
+  /**
+   * @param {string} key
+   * @returns {DayRecord}
+   */
   function getDay(key) {
     const day = state.days[key];
     if (!day || typeof day !== "object") return emptyDay();
@@ -407,6 +442,11 @@
     };
   }
 
+  /**
+   * @param {string} period
+   * @param {string} key
+   * @returns {DayEntry | null}
+   */
   function getEntry(period, key) {
     const day = state.days[dayKey()];
     const record = day && day[period];
@@ -415,6 +455,11 @@
 
   // يكتب إدخال ذكر معين في يوم اليوم ثم يحفظ فوراً (حتى لا يضيع
   // التقدم عند إغلاق الصفحة قبل أي حفظ لاحق).
+  /**
+   * @param {string} period
+   * @param {string} key
+   * @param {DayEntry} value
+   */
   function setEntry(period, key, value) {
     const today = dayKey();
     const day = getDay(today);
@@ -424,12 +469,22 @@
     saveState();
   }
 
+  /**
+   * @param {DhikrItem} item
+   * @param {DayEntry} [entry]
+   * @returns {boolean}
+   */
   function isItemComplete(item, entry) {
     if (!entry) return false;
     if (item.count === 0) return Boolean(entry.done);
     return (entry.count || 0) >= item.count;
   }
 
+  /**
+   * @param {string} period
+   * @param {string} [key]
+   * @returns {number}
+   */
   function countCompleted(period, key = dayKey()) {
     const record = getDay(key)[period];
     return SECTIONS[period].items.reduce(
@@ -439,6 +494,11 @@
     );
   }
 
+  /**
+   * @param {string} period
+   * @param {string} key
+   * @returns {boolean}
+   */
   function isSectionComplete(period, key) {
     return countCompleted(period, key) === SECTIONS[period].items.length;
   }
@@ -446,6 +506,10 @@
   /* ===== الإعدادات ===== */
   // يبني إعدادات سليمة من أي مصدر (تخزين أو ملف استيراد): القيم غير
   // المعروفة تعود إلى الافتراضي بدل أن تبقى ولا معنى لها.
+  /**
+   * @param {any} raw
+   * @returns {Settings | null}
+   */
   function normalizeSettings(raw) {
     if (!raw || typeof raw !== "object") return null;
     const lastExportAt =
@@ -459,6 +523,7 @@
     };
   }
 
+  /** @returns {Settings} */
   function loadSettings() {
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
@@ -469,6 +534,7 @@
     }
   }
 
+  /** @returns {void} */
   function saveSettings() {
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
@@ -523,18 +589,18 @@
     gregDate: document.getElementById("date-greg"),
     hijriDate: document.getElementById("date-hijri"),
     live: document.getElementById("live"),
-    page: document.querySelector(".page"),
+    page: /** @type {HTMLElement} */ (document.querySelector(".page")),
     timeLeft: document.getElementById("time-left"),
-    nextButton: document.getElementById("next-incomplete"),
+    nextButton: /** @type {HTMLButtonElement} */ (document.getElementById("next-incomplete")),
     undoBar: document.getElementById("undo-bar"),
     undoText: document.getElementById("undo-text"),
     undoButton: document.getElementById("undo-button"),
-    fontButtons: Array.from(document.querySelectorAll("[data-font-size]")),
-    themeButtons: Array.from(document.querySelectorAll("[data-theme]")),
+    fontButtons: /** @type {HTMLButtonElement[]} */ (Array.from(document.querySelectorAll("[data-font-size]"))),
+    themeButtons: /** @type {HTMLButtonElement[]} */ (Array.from(document.querySelectorAll("[data-theme]"))),
     exportButton: document.getElementById("export-backup"),
     importButton: document.getElementById("import-backup"),
     exportCsvButton: document.getElementById("export-csv"),
-    importFile: document.getElementById("import-file"),
+    importFile: /** @type {HTMLInputElement} */ (document.getElementById("import-file")),
     importConfirm: document.getElementById("import-confirm"),
     importSummary: document.getElementById("import-summary"),
     importApply: document.getElementById("import-apply"),
@@ -542,25 +608,25 @@
     importCancel: document.getElementById("import-cancel"),
     backupStatus: document.getElementById("backup-status"),
     backupReminder: document.getElementById("backup-reminder"),
-    tabs: Array.from(document.querySelectorAll(".tab")),
-    tablist: document.querySelector(".period-tabs"),
+    tabs: /** @type {HTMLButtonElement[]} */ (Array.from(document.querySelectorAll(".tab"))),
+    tablist: /** @type {HTMLElement} */ (document.querySelector(".period-tabs")),
     streakCurrent: document.getElementById("streak-current"),
     streakBest: document.getElementById("streak-best"),
     streakNote: document.getElementById("streak-note"),
     weeklySummary: document.getElementById("weekly-summary"),
     calendarMonth: document.getElementById("calendar-month"),
-    calendarPrev: document.getElementById("calendar-prev"),
-    calendarNext: document.getElementById("calendar-next"),
+    calendarPrev: /** @type {HTMLButtonElement} */ (document.getElementById("calendar-prev")),
+    calendarNext: /** @type {HTMLButtonElement} */ (document.getElementById("calendar-next")),
     calendarGrid: document.getElementById("calendar-grid"),
     calendarDetail: document.getElementById("calendar-detail"),
-    counterDialog: document.getElementById("counter-dialog"),
+    counterDialog: /** @type {HTMLDialogElement} */ (document.getElementById("counter-dialog")),
     counterTitle: document.getElementById("counter-title"),
     counterText: document.getElementById("counter-text"),
     counterCount: document.getElementById("counter-count"),
     counterFill: document.getElementById("counter-fill"),
-    counterButton: document.getElementById("counter-button"),
+    counterButton: /** @type {HTMLButtonElement} */ (document.getElementById("counter-button")),
     counterClose: document.getElementById("counter-close"),
-    counterReset: document.getElementById("counter-reset"),
+    counterReset: /** @type {HTMLButtonElement} */ (document.getElementById("counter-reset")),
     supplementGroup: document.getElementById("supplement-group"),
     supplementTitle: document.getElementById("supplement-title"),
     supplementNote: document.getElementById("supplement-note"),
@@ -584,7 +650,7 @@
   let lastAction = null;
   let undoTimer = null;
   let highlightTimer = null;
-  let pendingImport = null; // ملف الاستيراد بانتظار اختيار «دمج» أو «استبدال»
+  let pendingImport = /** @type {BackupPreview | null} */ (null); // ملف الاستيراد بانتظار اختيار «دمج» أو «استبدال»
   let touchStart = null;
   let insightsSignature = ""; // بصمة عدّادات الأقسام لتحديث الإحصاءات عند تغيّرها فقط
   let previousDone = null; // عدد المكتمل قبل آخر تحديث، لكشف «اكتمل الآن»
@@ -603,6 +669,11 @@
 
   /* ===== التاريخ ===== */
   // إنشاء Intl.DateTimeFormat مكلف، لذا ننشئ كل منسّق مرة واحدة بدل مرة لكل خلية تقويم.
+  /**
+   * @param {string} locale
+   * @param {Intl.DateTimeFormatOptions} options
+   * @returns {Intl.DateTimeFormat | null}
+   */
   function createDateFormatter(locale, options) {
     try {
       return new Intl.DateTimeFormat(locale, options);
@@ -658,6 +729,11 @@
   /* ===== بناء بطاقة الذكر ===== */
   // إنشاء <p> بأمان: textContent دائماً لأن نصوص الأذكار قد تُنسخ
   // من ملف استيراد، فلا يُفسَّر أي شيء كوسوم HTML.
+  /**
+   * @param {string} className
+   * @param {string} text
+   * @returns {HTMLParagraphElement}
+   */
   function paragraph(className, text) {
     const element = document.createElement("p");
     element.className = className;
@@ -665,11 +741,22 @@
     return element;
   }
 
+  /**
+   * @param {DhikrItem} item
+   * @param {DayEntry} progress
+   * @returns {string}
+   */
   function buildLabel(item, progress) {
     if (item.count <= 1) return "تم";
     return `${toArabicNumber(progress.count)} من ${toArabicNumber(item.count)}`;
   }
 
+  /**
+   * @param {DhikrItem} item
+   * @param {DayEntry} progress
+   * @param {boolean} complete
+   * @returns {string}
+   */
   function buildAriaLabel(item, progress, complete) {
     if (complete) return `مكتمل: ${item.title}`;
     if (item.count === 0) return `تسجيل الانتهاء من: ${item.title}`;
@@ -679,6 +766,11 @@
 
   // ترتيب نص الذكر: البسملة إن وردت، فالآية بين قوسين قرآنيين، فالفواصل،
   // فالمصدر، فالملاحظة — نفس الترتيب في القائمة وفي نافذة العدّاد.
+  /**
+   * @param {HTMLElement} container
+   * @param {DhikrItem} item
+   * @returns {void}
+   */
   function appendDhikrText(container, item) {
     if (item.basmala) {
       container.append(paragraph("basmala", "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ"));
@@ -702,6 +794,12 @@
      رسم الشكل، persist يحفظ في التخزين، increment وresetProgress
      يعدّلان الحالة ويسجلان إجراءً قابلاً للتراجع. تُجمع المؤشرات في
      itemControllers لتبقى مفاتيح التراجع والعدّاد تعمل بعد أي إعادة رسم. */
+  /**
+   * @param {string} period
+   * @param {DhikrItem} item
+   * @param {number} index
+   * @returns {HTMLLIElement}
+   */
   function createItem(period, item, index) {
     const key = itemKey(period, item);
     const saved = getEntry(period, key);
@@ -854,6 +952,10 @@
   /* ===== عرض القسم ===== */
   // إعادة بناء القسم كاملاً: بطاقات الأذكار ثم المجموعة المكمّلة
   // (الاستيقاظ/النوم) وحالات التبويبات، ثم تحديث كل الأرقام.
+  /**
+   * @param {string} period
+   * @returns {void}
+   */
   function renderPeriod(period) {
     closeCounter({ celebratePending: false });
     activePeriod = period;
@@ -1175,7 +1277,10 @@
       cell.append(number, dots);
       cell.addEventListener("click", () => {
         selectedCalendarKey = key;
-        elements.calendarGrid.querySelectorAll(".calendar-day").forEach((dayCell) => {
+        const dayCells = /** @type {NodeListOf<HTMLButtonElement>} */ (
+          elements.calendarGrid.querySelectorAll(".calendar-day")
+        );
+        dayCells.forEach((dayCell) => {
           if (!dayCell.dataset.key) return;
           const isSelected = dayCell.dataset.key === key;
           dayCell.classList.toggle("is-selected", isSelected);
@@ -1382,6 +1487,10 @@
 
   /* ===== الإعلانات لقارئ الشاشة ===== */
   // منطقة aria-live: تغيير نصها يُعلن تلقائياً دون تحريك التركيز.
+  /**
+   * @param {string} message
+   * @returns {void}
+   */
   function announce(message) {
     elements.live.textContent = message;
   }
@@ -1395,6 +1504,10 @@
     return `${toArabicNumber(value)} ${one}`;
   }
 
+  /**
+   * @param {number} milliseconds
+   * @returns {string}
+   */
   function formatDuration(milliseconds) {
     const totalMinutes = Math.max(1, Math.ceil(milliseconds / 60000));
     const hours = Math.floor(totalMinutes / 60);
@@ -1407,6 +1520,11 @@
     return parts.join(" و");
   }
 
+  /**
+   * @param {string} period
+   * @param {Date} now
+   * @returns {string}
+   */
   function describePeriodTime(period, now) {
     // نافذة المساء تعبر منتصف الليل (15:00 -> 04:00)، فنميّز الحالة
     // المغلِفة: داخل النافذة قبل أو بعد منتصف الليل، ونحسب النهاية
@@ -1422,7 +1540,7 @@
       const end = new Date(now);
       if (wraps && hour >= range.start) end.setDate(end.getDate() + 1);
       end.setHours(range.end, 0, 0, 0);
-      return `المتبقي: ${formatDuration(end - now)}`;
+      return `المتبقي: ${formatDuration(end.getTime() - now.getTime())}`;
     }
 
     if (period === "morning" && hour >= range.end) {
@@ -1434,7 +1552,7 @@
     if (start <= now) start.setDate(start.getDate() + 1);
 
     const name = period === "morning" ? "أذكار الصباح" : "أذكار المساء";
-    return `يبدأ وقت ${name} بعد ${formatDuration(start - now)}`;
+    return `يبدأ وقت ${name} بعد ${formatDuration(start.getTime() - now.getTime())}`;
   }
 
   function updateTimeLeft() {
@@ -1476,6 +1594,13 @@
   /* ===== التراجع عن آخر إجراء ===== */
   // شريط التراجع يحتفظ بنسخة «قبل» من الإدخال؛ إن لم يُلغَ خلال
   // 5 ثوانٍ يختفي ويُنسى الإجراء.
+  /**
+   * @param {string} key
+   * @param {string} title
+   * @param {DayEntry} before
+   * @param {string} actionLabel
+   * @returns {void}
+   */
   function showUndo(key, title, before, actionLabel) {
     lastAction = { key, title, before };
     elements.undoText.textContent = `${actionLabel}: ${title}`;
@@ -1506,6 +1631,11 @@
 
   /* ===== النسخ الاحتياطي ===== */
   // رسائل الحالة تنطق بلون الخطأ عند الفشل (is-error) وإلا بلون عادي.
+  /**
+   * @param {string} message
+   * @param {boolean} [isError]
+   * @returns {void}
+   */
   function setBackupStatus(message, isError = false) {
     elements.backupStatus.textContent = message;
     elements.backupStatus.classList.toggle("is-error", isError);
@@ -1578,6 +1708,10 @@
 
   // ملف النسخة يمر على نفس دوال التطهير (sanitizeDays + normalizeSettings)
   // فلا يدخل التخزين منه شيء غير متوقع، ولو كان مشيناً بالكامل.
+  /**
+   * @param {any} raw
+   * @returns {BackupFileResult}
+   */
   function validateBackup(raw) {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
       return { ok: false, reason: "بنية الملف غير صالحة." };
@@ -1604,6 +1738,12 @@
 
   // تنزيل ملف عبر رابط object-URL مؤقت: ننشئ العنصر ديناميكياً ثم
   // ننظّف الرابط بعدها حتى لا يتسرب الذاكرة.
+  /**
+   * @param {string} content
+   * @param {string} filename
+   * @param {string} type
+   * @returns {void}
+   */
   function downloadFile(content, filename, type) {
     const blob = new Blob([content], { type });
     const url = URL.createObjectURL(blob);
@@ -1702,6 +1842,10 @@
   }
 
   /* ===== النسخ الاحتياطي: قراءة ملف الاستيراد ومعاينته قبل الدمج أو الاستبدال ===== */
+  /**
+   * @param {File | undefined} file
+   * @returns {void}
+   */
   function handleImportFile(file) {
     if (!file) return;
 
@@ -1722,7 +1866,7 @@
         }
 
         const result = validateBackup(parsed);
-        if (!result.ok) throw new Error(result.reason);
+        if (result.ok === false) throw new Error(result.reason);
 
         pendingImport = result;
         elements.importSummary.textContent = result.dayCount === 0
@@ -1743,6 +1887,12 @@
 
   // قاعدة الدمج لذكر واحد: لا ينخفض أي عدد أبداً — نأخذ الأكبر بين
   // الحالي والمستورد؛ والأذكار بلا عدد تكتمل إذا اكتملت في أي جهة.
+  /**
+   * @param {DhikrItem} item
+   * @param {DayEntry} [currentEntry]
+   * @param {DayEntry} [importedEntry]
+   * @returns {DayEntry | null}
+   */
   function mergeItemEntry(item, currentEntry, importedEntry) {
     if (!currentEntry && !importedEntry) return null;
 
@@ -1761,6 +1911,11 @@
     return { count, done: count >= item.count };
   }
 
+  /**
+   * @param {DayRecord} currentDay
+   * @param {DayRecord} importedDay
+   * @returns {DayRecord}
+   */
   function mergeDayRecords(currentDay, importedDay) {
     const merged = emptyDay();
 
@@ -1778,6 +1933,11 @@
     return merged;
   }
 
+  /**
+   * @param {Record<string, DayRecord>} currentDays
+   * @param {Record<string, DayRecord>} importedDays
+   * @returns {Record<string, DayRecord>}
+   */
   function mergeDays(currentDays, importedDays) {
     const merged = { ...currentDays };
 
@@ -1792,8 +1952,12 @@
 
   // دمج ثلاثي للتبويبات: نحتفظ بتغيير محلي إذا لم يغيّر التبويب الآخر
   // الإدخال نفسه؛ وعند تعارض الإدخال نفسه تكون نسخة التخزين الأحدث هي المرجع.
+  /**
+   * @param {string | null} raw
+   * @returns {ProgressState | null}
+   */
   function parseStateSnapshot(raw) {
-    if (!raw) return { days: {}, stats: { bestStreak: 0 } };
+    if (!raw) return { schemaVersion: STATE_SCHEMA_VERSION, days: {}, stats: { bestStreak: 0 } };
     try {
       const parsed = JSON.parse(raw);
       if (!hasValidStoredShape(parsed) || Number(parsed.schemaVersion || 1) > STATE_SCHEMA_VERSION) return null;
@@ -1803,6 +1967,12 @@
     }
   }
 
+  /**
+   * @param {ProgressState} baseState
+   * @param {ProgressState} localState
+   * @param {ProgressState} remoteState
+   * @returns {ProgressState}
+   */
   function mergeConcurrentState(baseState, localState, remoteState) {
     const baseDays = baseState.days || {};
     const localDays = localState.days || {};
@@ -1902,7 +2072,9 @@
 
   /* ===== التبويبات ===== */
   elements.tablist.addEventListener("click", (event) => {
-    const tab = event.target.closest(".tab");
+    const tab = /** @type {HTMLElement | null} */ (
+      /** @type {Element} */ (event.target).closest(".tab")
+    );
     if (!tab) return;
     renderPeriod(tab.dataset.period);
   });
@@ -1988,7 +2160,7 @@
     (event) => {
       if (event.touches.length !== 1) return;
 
-      const target = event.target;
+      const target = /** @type {Element | null} */ (event.target);
       if (!target || typeof target.closest !== "function") return;
       if (target.closest("button, a, input, select, textarea, label")) return;
       if (target.closest(".site-footer")) return;
@@ -2096,12 +2268,12 @@
   /* ===== المزامنة بين التبويبات ===== */
   // حدث storage يصل إلى كل التبويبات عدا الذي كتب؛ نعيد القراءة
   // من الصفر بدل محاولة الدمج، فالمصدر الأحدث هو التخزين نفسه.
-  function reloadStateFromStorage(nextState) {
+  async function reloadStateFromStorage(nextState) {
     if (nextState) state = nextState;
     else {
       storageBlocked = false;
       storageLoadIssue = null;
-      state = loadState();
+      state = await loadState();
     }
     if (storageBlocked) reportStorageState(false);
     renderedDay = dayKey();

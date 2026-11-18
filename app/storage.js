@@ -1,3 +1,4 @@
+// @ts-check
 // طبقة تخزين موحّدة: تطبيق «أذكار» يعمل على المتصفح (ويب) وداخل Capacitor (APK).
 // المنطق (app.js) لا يعرف أي منصة يعمل عليها؛ يستدعي ADKAR_STORAGE.get/set/remove
 // والطبقة تختار الخلفية (localStorage على الويب، Preferences على APK).
