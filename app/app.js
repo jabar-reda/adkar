@@ -728,8 +728,6 @@
   let counterOpener = null; // الزر الذي فتح النافذة، لإعادة تركيزه بعد الإغلاق
   let counterResetArmed = false; // مرحلة تأكيد زر «إعادة العدّ»
   let counterResetTimer = null;
-  let celebrationTimer = null;
-  let supplementCelebrationTimer = null;
   let pendingCelebration = null; // احتفال مؤجّل حتى إغلاق نافذة العدّاد
   let pendingSupplementCelebration = null;
   let storageWarningShown = false;
@@ -1378,6 +1376,32 @@
     renderCalendar();
   }
 
+  // مؤقتات الاحتفال مفتاحها الشريط نفسه، لأن شريطي القسم والمكمّل قد يحتفلان معاً.
+  const celebrationTimers = new Map();
+
+  // يشغّل حركة الاحتفال على شريط معيّن ثم يزيل الصنف بعد مهلته.
+  // قراءة offsetWidth تجبر المتصفح على إعادة الحساب، فتبدأ الحركة من صفر
+  // ولو كان الصنف مضافاً قبل لحظات.
+  /**
+   * @param {HTMLElement} bar
+   * @param {string} message
+   * @returns {void}
+   */
+  function playCelebration(bar, message) {
+    bar.classList.remove("is-celebrating");
+    void bar.offsetWidth;
+    bar.classList.add("is-celebrating");
+    clearTimeout(celebrationTimers.get(bar));
+    celebrationTimers.set(
+      bar,
+      setTimeout(() => {
+        bar.classList.remove("is-celebrating");
+        celebrationTimers.delete(bar);
+      }, CELEBRATION_MS)
+    );
+    announce(message);
+  }
+
   function celebrate(section) {
     // إن كانت نافذة العدّاد مفتوحة نؤجل الاحتفال إلى الإغلاق،
     // حتى لا تختفي الحركة خلف التعتيم دون أن يراها المستخدم.
@@ -1385,16 +1409,7 @@
       pendingCelebration = section;
       return;
     }
-    elements.progressBar.classList.remove("is-celebrating");
-    // قراءة offsetWidth تجبر المتصفح على إعادة الحساب، فتبدأ
-    // الحركة من صفر ولو كان الصنف مضافاً قبل لحظات.
-    void elements.progressBar.offsetWidth;
-    elements.progressBar.classList.add("is-celebrating");
-    clearTimeout(celebrationTimer);
-    celebrationTimer = setTimeout(() => {
-      elements.progressBar.classList.remove("is-celebrating");
-    }, 1200);
-    announce(`أكملت ${section.name} كاملة`);
+    playCelebration(elements.progressBar, `أكملت ${section.name} كاملة`);
   }
 
   function celebrateSupplement(supplement) {
@@ -1402,14 +1417,8 @@
       pendingSupplementCelebration = supplement;
       return;
     }
-    elements.supplementBar.classList.remove("is-celebrating");
-    void elements.supplementBar.offsetWidth;
-    elements.supplementBar.classList.add("is-celebrating");
-    clearTimeout(supplementCelebrationTimer);
-    supplementCelebrationTimer = setTimeout(() => {
-      elements.supplementBar.classList.remove("is-celebrating");
-    }, 1200);
-    announce(
+    playCelebration(
+      elements.supplementBar,
       supplement.period === "wake"
         ? "أكملت أذكار الاستيقاظ — أصبح صباحك ذهبياً"
         : "أكملت أذكار النوم — أصبح مساؤك ذهبياً"
