@@ -391,52 +391,71 @@
     return deepCopy(state);
   }
 
+  // الحفظ على الويب دون Web Locks (وفي الاختبارات): كتابة متزامنة مباشرة
+  // حتى تبقى القراءة والكتابة فوريتين.
+  /**
+   * @param {ProgressState} snapshot
+   * @returns {boolean}
+   */
+  function saveWithoutLocks(snapshot) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+      lastPersistedState = deepCopy(snapshot);
+      reportStorageState(true);
+      return true;
+    } catch (error) {
+      reportStorageState(false);
+      return false;
+    }
+  }
+
+  // Web Locks يجعل القراءة والدمج والكتابة عملية متسلسلة بين التبويبات.
+  // من دونه لا توجد primitive ذرية في localStorage تضمن منع stale overwrite.
+  /**
+   * @param {ProgressState} localSnapshot
+   * @param {ProgressState} baseSnapshot
+   * @returns {void}
+   */
+  function saveUnderLock(localSnapshot, baseSnapshot) {
+    navigator.locks.request("adkar-progress-write", { mode: "exclusive" }, async () => {
+      if (storageBlocked) return;
+      const raw = await ADKAR_STORAGE.get(STORAGE_KEY);
+      const remote = parseStateSnapshot(raw);
+      if (!remote) {
+        storageBlocked = true;
+        storageLoadIssue = "بيانات التقدم المخزنة تغيّرت إلى بنية تالفة أثناء المزامنة. أوقفنا الكتابة حفاظاً عليها.";
+        reportStorageState(false);
+        return;
+      }
+      const merged = mergeConcurrentState(baseSnapshot, localSnapshot, remote);
+      state = merged;
+      updateStreakStats();
+      state.stats.bestStreak = Math.max(state.stats.bestStreak, getBestStreak());
+      await ADKAR_STORAGE.set(STORAGE_KEY, JSON.stringify(state));
+      lastPersistedState = deepCopy(state);
+      reportStorageState(true);
+    }).catch(() => {
+      storageLoadIssue = "تعذّر حفظ التقدم داخل قفل المزامنة. بقي التقدم في الذاكرة ولم نكتب فوق البيانات.";
+      reportStorageState(false);
+    });
+  }
+
   /** @returns {Promise<boolean>} */
   async function saveState() {
     if (storageBlocked) { reportStorageState(false); return false; }
     const localSnapshot = prepareStateSnapshot();
-    const hasLocksSave = (typeof navigator !== "undefined" && !!navigator.locks && typeof navigator.locks.request === "function");
+    const hasLocksSave = typeof navigator !== "undefined" && !!navigator.locks && typeof navigator.locks.request === "function";
     // On the web without Web Locks (and in tests), keep the original synchronous
     // localStorage path so reads/writes stay immediate.
     if (!ADKAR_STORAGE.isNative && !hasLocksSave) {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(localSnapshot));
-        lastPersistedState = deepCopy(localSnapshot);
-        reportStorageState(true);
-        return true;
-      } catch (error) {
-        reportStorageState(false);
-        return false;
-      }
+      return saveWithoutLocks(localSnapshot);
     }
     // يجب التقاط قاعدة الدمج عند طلب القفل، لا عند تنفيذه؛ فقد تصل storage event
     // أثناء انتظار القفل وتحدّث lastPersistedState قبل دور هذه العملية.
     const baseSnapshot = deepCopy(lastPersistedState || emptyState());
 
-    // Web Locks يجعل القراءة والدمج والكتابة عملية متسلسلة بين التبويبات.
-    // من دونه لا توجد primitive ذرية في localStorage تضمن منع stale overwrite.
-    if (typeof navigator !== "undefined" && navigator.locks && typeof navigator.locks.request === "function") {
-      navigator.locks.request("adkar-progress-write", { mode: "exclusive" }, async () => {
-        if (storageBlocked) return;
-        const raw = await ADKAR_STORAGE.get(STORAGE_KEY);
-        const remote = parseStateSnapshot(raw);
-        if (!remote) {
-          storageBlocked = true;
-          storageLoadIssue = "بيانات التقدم المخزنة تغيّرت إلى بنية تالفة أثناء المزامنة. أوقفنا الكتابة حفاظاً عليها.";
-          reportStorageState(false);
-          return;
-        }
-        const merged = mergeConcurrentState(baseSnapshot, localSnapshot, remote);
-        state = merged;
-        updateStreakStats();
-        state.stats.bestStreak = Math.max(state.stats.bestStreak, getBestStreak());
-        await ADKAR_STORAGE.set(STORAGE_KEY, JSON.stringify(state));
-        lastPersistedState = deepCopy(state);
-        reportStorageState(true);
-      }).catch(() => {
-        storageLoadIssue = "تعذّر حفظ التقدم داخل قفل المزامنة. بقي التقدم في الذاكرة ولم نكتب فوق البيانات.";
-        reportStorageState(false);
-      });
+    if (hasLocksSave) {
+      saveUnderLock(localSnapshot, baseSnapshot);
       return true;
     }
 
