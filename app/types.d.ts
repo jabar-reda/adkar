@@ -63,8 +63,17 @@ interface DhikrData {
   SLEEP_ITEMS: DhikrItem[];
 }
 
+/** بيانات التذييل التي يعرّضها app/config.js. */
+interface AppMeta {
+  version: string;
+  author: string;
+  github: string;
+  instagram: string;
+}
+
 /** القيم المشتركة التي يعرّضها app/config.js. */
 interface AdkarConfig {
+  appMeta: AppMeta;
   storageKeys: { state: string; settings: string };
   fontSizes: string[];
   themes: string[];

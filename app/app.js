@@ -28,14 +28,17 @@ import {
   exportBackup,
   exportCsv,
   handleImportFile,
+  openImportPasteDialog,
   updateBackupReminder,
 } from "./modules/backup.js";
+import { renderColophon } from "./modules/about.js";
 import { announce, elements } from "./modules/dom.js";
 import {
   getCalendarMonth,
   renderCalendar,
   resetCalendarToCurrentMonth,
   setCalendarMonth,
+  setDaySelectedHandler,
   setSelectedCalendarKey,
 } from "./modules/insights.js";
 import { renderPeriod, updateProgress } from "./modules/period.js";
@@ -72,6 +75,12 @@ import {
 import { getLastAction, hideUndo } from "./modules/undo.js";
 import { getActivePeriod, itemControllers } from "./modules/ui-state.js";
 import {
+  getViewedDayKey,
+  isViewingToday,
+  resetViewedDayKey,
+  setViewedDayKey,
+} from "./modules/view-day.js";
+import {
   addMonths,
   dayKey,
   itemKey,
@@ -89,7 +98,7 @@ let touchStart = null;
 function goToNextIncomplete() {
   const period = getActivePeriod();
   const section = SECTIONS[period];
-  const record = getDay(dayKey())[period];
+  const record = getDay(getViewedDayKey())[period];
   const index = section.items.findIndex(
     (item) => !isItemComplete(item, record[itemKey(period, item)])
   );
@@ -194,6 +203,40 @@ elements.importFile.addEventListener("change", () => {
 elements.importApply.addEventListener("click", applyImport);
 elements.importMerge.addEventListener("click", applyMerge);
 elements.importCancel.addEventListener("click", cancelImport);
+elements.importPaste.addEventListener("click", openImportPasteDialog);
+
+/* ===== عرض يوم مختار من التقويم ===== */
+// النقر على يوم يعيد بناء الأذكار لذلك اليوم (قراءة وتعديلاً)، ثم يصعد
+// إلى أعلى الصفحة ليرى المستخدم القائمة الجديدة؛ ومن زر «عرض اليوم»
+// يعود إلى اليوم الحالي وشهره.
+function prefersReducedMotion() {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
+function revealPeriodTop() {
+  if (!elements.title || typeof elements.title.scrollIntoView !== "function") return;
+  elements.title.scrollIntoView({
+    behavior: prefersReducedMotion() ? "auto" : "smooth",
+    block: "start",
+  });
+}
+
+setDaySelectedHandler((dateKey) => {
+  setViewedDayKey(dateKey);
+  renderPeriod(getActivePeriod());
+  revealPeriodTop();
+});
+
+elements.viewingToday.addEventListener("click", () => {
+  setViewedDayKey(dayKey());
+  resetCalendarToCurrentMonth();
+  renderPeriod(getActivePeriod());
+  revealPeriodTop();
+});
 
 elements.calendarPrev.addEventListener("click", () => {
   const calendarMonth = startOfMonth(addMonths(getCalendarMonth(), -1));
@@ -275,7 +318,9 @@ function cancelReset() {
   clearTimeout(resetTimer);
   resetTimer = null;
   elements.reset.classList.remove("is-confirming");
-  elements.reset.textContent = "إعادة تعيين اليوم";
+  elements.reset.textContent = isViewingToday()
+    ? "إعادة تعيين اليوم"
+    : "إعادة تعيين هذا اليوم";
 }
 
 elements.reset.addEventListener("click", () => {
@@ -287,11 +332,12 @@ elements.reset.addEventListener("click", () => {
   }
 
   cancelReset();
-  delete state.days[dayKey()];
+  const dateKey = getViewedDayKey();
+  delete state.days[dateKey];
   saveState();
-  setSelectedCalendarKey(dayKey());
+  setSelectedCalendarKey(dateKey);
   renderPeriod(getActivePeriod());
-  announce("أُعيد تعيين تقدم اليوم");
+  announce(isViewingToday() ? "أُعيد تعيين تقدم اليوم" : "أُعيد تعيين تقدم اليوم المختار");
 });
 
 /* ===== تغيّر اليوم أثناء بقاء الصفحة مفتوحة ===== */
@@ -300,6 +346,7 @@ elements.reset.addEventListener("click", () => {
 function checkDayChange() {
   if (renderedDay === dayKey()) return;
   renderedDay = dayKey();
+  resetViewedDayKey();
   resetCalendarToCurrentMonth();
   updateDates();
   renderPeriod(getActivePeriod());
@@ -332,6 +379,7 @@ async function reloadStateFromStorage(nextState) {
   }
   if (isStorageBlocked()) reportStorageState(false);
   renderedDay = dayKey();
+  resetViewedDayKey();
   resetCalendarToCurrentMonth();
   updateDates();
   renderPeriod(getActivePeriod());
@@ -385,6 +433,7 @@ renderedDay = dayKey();
 if (isStorageBlocked()) reportStorageState(false);
 syncSettingsUI();
 applyFontSize();
+renderColophon();
 updateDates();
 updateBackupReminder();
 if (typeof navigator !== "undefined" && navigator.storage && typeof navigator.storage.persist === "function") {

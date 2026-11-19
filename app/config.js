@@ -5,6 +5,14 @@
   "use strict";
 
   window.ADKAR_CONFIG = {
+    // بيانات التذييل: رقم الإصدار المعروض (يطابق package.json)، والمطور،
+    // ورابطا GitHub وInstagram. اسم إنستغرام يُقبل بعلامة @ أو بدونها.
+    appMeta: {
+      version: "1.1.1",
+      author: "jaba reda",
+      github: "https://github.com/jabar-reda/adkar",
+      instagram: "jbr.rda",
+    },
     // مفاتيح التخزين في localStorage. تغييرهما يجعل بيانات المستخدم القديمة
     // تبدأ من صفر، لأن التطبيق يقرأ البيانات بهذا الاسم بالضبط.
     // كانت المفاتيح douaa-tracker.* في إصدار المشروع الأول؛ انتقلت البيانات

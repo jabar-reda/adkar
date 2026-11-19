@@ -3,6 +3,7 @@
 
 import { PERIOD_WINDOWS } from "./constants.js";
 import { elements } from "./dom.js";
+import { isViewingToday } from "./view-day.js";
 import { formatDuration } from "./utils.js";
 import { getActivePeriod } from "./ui-state.js";
 
@@ -136,5 +137,10 @@ function describePeriodTime(period, now) {
 }
 
 export function updateTimeLeft() {
+  // عدّاد الوقت يخص اليوم الحالي؛ عرض يوم سابق لا معنى له معه.
+  if (!isViewingToday()) {
+    elements.timeLeft.textContent = "";
+    return;
+  }
   elements.timeLeft.textContent = describePeriodTime(getActivePeriod(), new Date());
 }

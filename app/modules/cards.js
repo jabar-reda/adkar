@@ -135,11 +135,12 @@ function paintItemCard(nodes, item, progress) {
  * @param {DhikrItem} item
  * @param {number} index
  * @param {() => void} onProgressChange
+ * @param {string} dateKey
  * @returns {HTMLLIElement}
  */
-export function createItem(period, item, index, onProgressChange) {
+export function createItem(period, item, index, onProgressChange, dateKey) {
   const entryKey = itemKey(period, item);
-  const saved = getEntry(period, entryKey);
+  const saved = getEntry(period, entryKey, dateKey);
   const progress = {
     count: Number(saved && saved.count) || 0,
     done: Boolean(saved && saved.done),
@@ -151,7 +152,7 @@ export function createItem(period, item, index, onProgressChange) {
   }
 
   function persist() {
-    setEntry(period, entryKey, { count: progress.count, done: progress.done });
+    setEntry(period, entryKey, { count: progress.count, done: progress.done }, dateKey);
   }
 
   function snapshot() {

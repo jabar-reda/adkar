@@ -289,6 +289,16 @@ function fail(message) {
   if (missingSim.length === 0) pass("every simulated element exists in index.html");
   else missingSim.forEach((id) => fail(`tests/tests.js registers an unknown id: ${id}`));
 
+  const colophonIcons = (html.match(/class="colophon-icon"/g) || []).length;
+  if (colophonIcons === 2) pass("footer shows one icon per social link");
+  else fail(`footer has ${colophonIcons} colophon icons instead of 2`);
+
+  if (html.includes('class="colophon-copy">© <span id="app-year"></span>')) {
+    pass("footer keeps the copyright year on one line");
+  } else {
+    fail("footer copyright line lost its year element");
+  }
+
   /* ===== الخطوط المحلية ===== */
   if (/fonts\.(?:googleapis|gstatic)\.com/.test(html + css)) {
     fail("index.html or styles.css still requests Google Fonts");
@@ -538,6 +548,11 @@ register("next-incomplete", "button");
 register("dhikr-list", "ol");
 register("storage-warning", "p", { hidden: true });
 
+const viewingNote = register("viewing-note", "div", { hidden: true });
+const viewingNoteText = register("viewing-note-text", "p");
+const viewingToday = register("viewing-today", "button");
+viewingNote.append(viewingNoteText, viewingToday);
+
 const supplementGroup = register("supplement-group", "section", { hidden: true });
 const supplementList = register("supplement-list", "ol");
 register("supplement-title", "h2");
@@ -556,6 +571,7 @@ supplementGroup.append(
 );
 
 panel.append(
+  viewingNote,
   byId.get("period-title"),
   byId.get("period-hint"),
   byId.get("time-left"),
@@ -588,6 +604,7 @@ register("import-backup", "button");
 register("import-apply", "button");
 register("import-merge", "button");
 register("import-cancel", "button");
+register("import-paste", "button");
 
 register("streak-current", "span");
 register("streak-best", "span");
@@ -631,6 +648,43 @@ document.body.append(counterDialog);
 
 const importFile = register("import-file", "input");
 importFile.files = [];
+
+/* نافذة النسخة الاحتياطية: نتيجة التصدير/الاستيراد ونص النسخة القابل للنسخ */
+const backupDialog = register("backup-dialog", "dialog");
+backupDialog.open = false;
+backupDialog.showModal = function showModal() {
+  this.open = true;
+  document.body.classList.add("is-dialog-open");
+};
+backupDialog.close = function close() {
+  this.open = false;
+  document.body.classList.remove("is-dialog-open");
+  this.dispatch("close");
+};
+register("backup-dialog-title", "h2");
+register("backup-dialog-message", "p");
+register("backup-dialog-text", "textarea");
+register("backup-dialog-close", "button");
+register("backup-copy", "button");
+register("backup-download", "button");
+register("backup-verify", "button");
+backupDialog.append(
+  byId.get("backup-dialog-title"),
+  byId.get("backup-dialog-message"),
+  byId.get("backup-dialog-text"),
+  byId.get("backup-dialog-close"),
+  byId.get("backup-copy"),
+  byId.get("backup-download"),
+  byId.get("backup-verify")
+);
+document.body.append(backupDialog);
+
+/* تذييل الهوية */
+register("app-version", "span");
+register("app-year", "span");
+register("app-author", "span");
+register("app-github", "a");
+register("app-instagram", "a");
 
 const fontButtons = [
   ["small", "صغير"],
@@ -676,6 +730,12 @@ footer.append(
   byId.get("import-apply"),
   byId.get("import-merge"),
   byId.get("import-cancel"),
+  byId.get("import-paste"),
+  byId.get("app-version"),
+  byId.get("app-year"),
+  byId.get("app-author"),
+  byId.get("app-github"),
+  byId.get("app-instagram"),
   byId.get("reset-day"),
   byId.get("date-greg"),
   byId.get("date-hijri")
@@ -744,6 +804,13 @@ const sandbox = {
     constructor(parts, options = {}) {
       this.parts = parts;
       this.type = options.type;
+    }
+  },
+  // بديل File.text في WebView قديم داخل أندرويد (FileReader متوفر دائماً).
+  FileReader: class FileReader {
+    readAsText(file) {
+      this.result = typeof file.__text === "string" ? file.__text : "";
+      if (typeof this.onload === "function") this.onload();
     }
   },
   URL: {
@@ -867,6 +934,31 @@ check(
   byId.get("backup-reminder").textContent
 );
 check(
+  "footer shows the app version in Arabic digits",
+  byId.get("app-version").textContent === "١.١.١",
+  byId.get("app-version").textContent
+);
+check(
+  "footer shows the current year",
+  byId.get("app-year").textContent === "٢٠٢٦",
+  byId.get("app-year").textContent
+);
+check(
+  "footer names the developer",
+  byId.get("app-author").textContent === "jaba reda",
+  byId.get("app-author").textContent
+);
+check(
+  "footer links the GitHub repository",
+  byId.get("app-github").href === "https://github.com/jabar-reda/adkar",
+  byId.get("app-github").href
+);
+check(
+  "footer links the Instagram profile",
+  byId.get("app-instagram").href === "https://instagram.com/jbr.rda",
+  byId.get("app-instagram").href
+);
+check(
   "calendar has 35 cells for October 2026",
   byId.get("calendar-grid").children.length === 35,
   String(byId.get("calendar-grid").children.length)
@@ -907,7 +999,7 @@ check(
   document.title
 );
 check("progress saved to storage", Boolean(state().days["2026-10-31"]));
-check("progress storage uses schema version 2", state().schemaVersion === 2, String(state().schemaVersion));
+check("progress storage uses schema version 3", state().schemaVersion === 3, String(state().schemaVersion));
 check("undo bar visible", undoBar.hidden === false);
 check("undo text mentions title", undoText.textContent.includes("آية الكرسي"), undoText.textContent);
 undoButton.click();
@@ -1089,6 +1181,14 @@ async function runAsyncTests() {
   );
 
   byId.get("import-apply").click();
+  check(
+    "import success dialog confirms the restore",
+    backupDialog.open === true &&
+      byId.get("backup-dialog-title").textContent === "تم استيراد النسخة",
+    byId.get("backup-dialog-title").textContent
+  );
+  byId.get("backup-dialog-close").click();
+  check("import success dialog closes", backupDialog.open === false);
   check("import applies font setting", settings().fontSize === "small", JSON.stringify(settings()));
   check(
     "import applies data (first item complete)",
@@ -1166,6 +1266,57 @@ async function runAsyncTests() {
     !byId.get("backup-reminder").classList.contains("is-warning"),
     byId.get("backup-reminder").textContent
   );
+  check(
+    "export opens a confirmation dialog",
+    backupDialog.open === true &&
+      byId.get("backup-dialog-title").textContent === "تم تصدير النسخة",
+    byId.get("backup-dialog-title").textContent
+  );
+  check(
+    "export dialog carries the JSON backup",
+    byId.get("backup-dialog-text").value.includes('"schemaVersion": 3') &&
+      byId.get("backup-dialog-text").value.includes('"days"'),
+    byId.get("backup-dialog-text").value.slice(0, 80)
+  );
+  check(
+    "export dialog offers a download on the web",
+    byId.get("backup-download").hidden === false &&
+      byId.get("backup-copy").hidden === false
+  );
+  byId.get("backup-dialog-close").click();
+  check("export dialog closes", backupDialog.open === false);
+
+  /* لصق نسخة: مسار الاستيراد الذي يعمل داخل تطبيق أندرويد */
+  byId.get("import-paste").click();
+  check(
+    "paste dialog opens with an editable box",
+    backupDialog.open === true &&
+      byId.get("backup-dialog-text").hidden === false &&
+      byId.get("backup-dialog-text").readOnly === false,
+    String(byId.get("backup-dialog-text").readOnly)
+  );
+  check(
+    "paste dialog shows the verify button",
+    byId.get("backup-verify").hidden === false
+  );
+  byId.get("backup-dialog-text").value = JSON.stringify({
+    schemaVersion: 3,
+    days: { "2026-10-28": { morning: { "morning-0": { count: 1, done: true } } } },
+  });
+  byId.get("backup-verify").click();
+  check("paste import closes the dialog", backupDialog.open === false);
+  check(
+    "paste import shows a preview",
+    byId.get("import-confirm").hidden === false,
+    byId.get("backup-status").textContent
+  );
+  check(
+    "paste import preview counts the day",
+    byId.get("import-summary").textContent.includes("يوم واحد"),
+    byId.get("import-summary").textContent
+  );
+  byId.get("import-cancel").click();
+  check("paste import cancel closes the preview", byId.get("import-confirm").hidden === true);
 
   /* CSV */
   byId.get("export-csv").click();
@@ -1196,6 +1347,61 @@ async function runAsyncTests() {
     byId.get("backup-status").textContent.includes("CSV"),
     byId.get("backup-status").textContent
   );
+
+  /* داخل APK (WebView): تنزيل blob لا يعمل، فيُعرض النص للنسخ بدلاً منه */
+  sandbox.ADKAR_STORAGE.isNative = true;
+
+  lastBlob = null;
+  byId.get("export-backup").click();
+  check(
+    "native JSON export never creates a blob",
+    lastBlob === null,
+    String(lastBlob)
+  );
+  check(
+    "native JSON export hides the download and keeps copy",
+    byId.get("backup-download").hidden === true &&
+      byId.get("backup-copy").hidden === false
+  );
+  check(
+    "native JSON export explains the copy path",
+    byId.get("backup-dialog-message").textContent.includes("التنزيل المباشر غير متاح"),
+    byId.get("backup-dialog-message").textContent
+  );
+  check(
+    "native JSON export still carries the backup text",
+    byId.get("backup-dialog-text").value.includes('"schemaVersion": 3') &&
+      byId.get("backup-dialog-text").value.includes('"days"'),
+    byId.get("backup-dialog-text").value.slice(0, 80)
+  );
+  byId.get("backup-dialog-close").click();
+
+  lastBlob = null;
+  byId.get("export-csv").click();
+  check(
+    "native CSV export never creates a blob",
+    lastBlob === null,
+    String(lastBlob)
+  );
+  check(
+    "native CSV export shows the CSV text for copying",
+    byId.get("backup-dialog-title").textContent === "تم تصدير CSV" &&
+      byId.get("backup-dialog-text").value.includes("التاريخ") &&
+      byId.get("backup-copy").hidden === false,
+    byId.get("backup-dialog-title").textContent
+  );
+  check(
+    "native CSV export hides the download button",
+    byId.get("backup-download").hidden === true
+  );
+  check(
+    "native CSV export status message",
+    byId.get("backup-status").textContent.includes("CSV") &&
+      byId.get("backup-status").textContent.includes("تم تجهيز"),
+    byId.get("backup-status").textContent
+  );
+  byId.get("backup-dialog-close").click();
+  sandbox.ADKAR_STORAGE.isNative = false;
 
   /* الدمج */
   importFile.files = [
@@ -1304,6 +1510,67 @@ async function runAsyncTests() {
     document.title
   );
 
+  /* اختيار يوم سابق من التقويم يعرضه في الأعلى ويسمح بتعديله */
+  const calendarCell = (key) =>
+    byId.get("calendar-grid").children.find((cell) => cell.dataset.key === key) || null;
+
+  calendarCell("2026-10-29").click();
+  check(
+    "calendar selection marks the chosen day",
+    Boolean(calendarCell("2026-10-29").classList.contains("is-selected")) &&
+      !calendarCell("2026-10-31").classList.contains("is-selected")
+  );
+  check(
+    "selecting a past day shows its adhkar on top",
+    pill(0).textContent === "تم ✓" && pill(1).textContent.includes("٠ من ٣"),
+    `${pill(0).textContent} / ${pill(1).textContent}`
+  );
+  const expectedPastDate = new Intl.DateTimeFormat("ar", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new RealDate(2026, 9, 29));
+  check(
+    "viewing note explains the past day",
+    byId.get("viewing-note").hidden === false &&
+      byId.get("viewing-note-text").textContent.includes(expectedPastDate),
+    byId.get("viewing-note-text").textContent
+  );
+  check(
+    "past day hides the live countdown",
+    timeLeft.textContent === "",
+    timeLeft.textContent
+  );
+  check(
+    "reset button names the viewed day",
+    byId.get("reset-day").textContent === "إعادة تعيين هذا اليوم",
+    byId.get("reset-day").textContent
+  );
+
+  pill(1).click();
+  check(
+    "editing a past day saves into that day",
+    state().days["2026-10-29"].morning[itemKeys.morning1].count === 1,
+    JSON.stringify(state().days["2026-10-29"].morning)
+  );
+  check(
+    "editing a past day leaves today untouched",
+    state().days["2026-10-31"].morning[itemKeys.morning1].count === 3,
+    JSON.stringify(state().days["2026-10-31"].morning)
+  );
+
+  byId.get("viewing-today").click();
+  check(
+    "view-today button returns to the current day",
+    byId.get("viewing-note").hidden === true && pill(1).textContent === "تم ✓",
+    `${byId.get("viewing-note").hidden} / ${pill(1).textContent}`
+  );
+  check(
+    "returning to today restores the countdown",
+    timeLeft.textContent !== "" && byId.get("reset-day").textContent === "إعادة تعيين اليوم",
+    timeLeft.textContent
+  );
+
   /* العدّاد الكبير */
   const counterOpen = (index) => list.children[index].querySelector(".counter-open");
   const counterDialog = byId.get("counter-dialog");
@@ -1390,6 +1657,28 @@ async function runAsyncTests() {
   );
   byId.get("import-cancel").click();
   check("empty backup cancel closes the preview", byId.get("import-confirm").hidden === true);
+
+  /* WebView قديم لا يوفر File.text: القراءة تمر عبر FileReader */
+  importFile.files = [{
+    size: 60,
+    __text: JSON.stringify({
+      schemaVersion: 3,
+      days: { "2026-10-27": { morning: { "morning-0": { count: 1, done: true } } } },
+    }),
+  }];
+  importFile.dispatch("change");
+  await new Promise((resolve) => setImmediate(resolve));
+  check(
+    "import reads files through FileReader (old WebView)",
+    byId.get("import-confirm").hidden === false,
+    byId.get("backup-status").textContent
+  );
+  check(
+    "FileReader import counts the day",
+    byId.get("import-summary").textContent.includes("يوم واحد"),
+    byId.get("import-summary").textContent
+  );
+  byId.get("import-cancel").click();
 
   /* إكمال قسم الصباح، وآخر ذكر من داخل العدّاد */
   for (let index = 0; index < list.children.length; index += 1) {
@@ -1807,6 +2096,89 @@ async function runAsyncTests() {
     "corrupted progress is never overwritten by an automatic save",
     storage.get("adkar.v1") === corruptedProgress,
     storage.get("adkar.v1")
+  );
+
+  /* توافق سورة الملك مع الأيام المسجلة قبل إضافتها (schemaVersion 2) */
+  const legacyEvening = {};
+  EVENING_ITEM_IDS.filter((id) => id !== "surah-al-mulk").forEach((id) => {
+    const count = DHIKR_COUNTS.get(id);
+    legacyEvening["evening-" + id] = count === 0 ? { count: 0, done: true } : { count, done: true };
+  });
+  const mulkKey = "evening-surah-al-mulk";
+  const stateModule = pageModule(path.join(root, "app", "modules", "state.js")).namespace;
+  const parseSnapshot = stateModule.parseStateSnapshot;
+
+  const legacySnapshot = parseSnapshot(
+    JSON.stringify({
+      schemaVersion: 2,
+      days: {
+        "2026-10-25": { morning: {}, evening: legacyEvening, wake: {}, sleep: {} },
+        "2026-10-24": {
+          morning: {},
+          evening: { ...legacyEvening, [mulkKey]: { count: 0, done: false } },
+          wake: {},
+          sleep: {},
+        },
+        "2026-10-23": {
+          morning: {},
+          evening: { "evening-ayat-al-kursi": { count: 1, done: true } },
+          wake: {},
+          sleep: {},
+        },
+      },
+    })
+  );
+  check(
+    "a legacy complete evening counts as reading Al-Mulk",
+    Boolean(
+      legacySnapshot &&
+        legacySnapshot.days["2026-10-25"].evening[mulkKey] &&
+        legacySnapshot.days["2026-10-25"].evening[mulkKey].count === 1
+    ),
+    JSON.stringify(legacySnapshot && legacySnapshot.days["2026-10-25"].evening[mulkKey])
+  );
+  check(
+    "a legacy explicit zero for Al-Mulk is never overwritten",
+    Boolean(
+      legacySnapshot &&
+        legacySnapshot.days["2026-10-24"].evening[mulkKey].count === 0 &&
+        legacySnapshot.days["2026-10-24"].evening[mulkKey].done === false
+    ),
+    JSON.stringify(legacySnapshot && legacySnapshot.days["2026-10-24"].evening[mulkKey])
+  );
+  check(
+    "an incomplete legacy evening keeps Al-Mulk unread",
+    Boolean(
+      legacySnapshot && !legacySnapshot.days["2026-10-23"].evening[mulkKey]
+    ),
+    JSON.stringify(legacySnapshot && legacySnapshot.days["2026-10-23"].evening)
+  );
+
+  const currentSnapshot = parseSnapshot(
+    JSON.stringify({
+      schemaVersion: 3,
+      days: { "2026-10-22": { morning: {}, evening: legacyEvening, wake: {}, sleep: {} } },
+    })
+  );
+  check(
+    "schema 3 days are left exactly as stored",
+    Boolean(currentSnapshot && !currentSnapshot.days["2026-10-22"].evening[mulkKey]),
+    JSON.stringify(currentSnapshot && currentSnapshot.days["2026-10-22"].evening)
+  );
+
+  storage.set(
+    "adkar.v1",
+    JSON.stringify({
+      schemaVersion: 2,
+      days: { "2026-10-26": { morning: {}, evening: legacyEvening, wake: {}, sleep: {} } },
+    })
+  );
+  await dispatchWindowEvent("storage", { key: "adkar.v1" });
+  pill(0).click();
+  check(
+    "schema 2 data stored on the device migrates on reload",
+    Boolean(state().days["2026-10-26"] && state().days["2026-10-26"].evening[mulkKey]),
+    JSON.stringify(state().days["2026-10-26"] && state().days["2026-10-26"].evening)
   );
 
 }

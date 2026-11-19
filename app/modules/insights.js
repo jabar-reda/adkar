@@ -23,9 +23,20 @@ import {
 
 let calendarMonth = startOfMonth(new Date());
 let selectedCalendarKey = dayKey();
+/** @type {((dateKey: string) => void) | null} */
+let onDaySelected = null;
 
 /** @returns {Date} */
 export const getCalendarMonth = () => calendarMonth;
+
+/**
+ * يربط التقويم بمن يعرض أذكار اليوم المختار (app.js) دون استيراد دائري.
+ * @param {(dateKey: string) => void} handler
+ * @returns {void}
+ */
+export function setDaySelectedHandler(handler) {
+  onDaySelected = handler;
+}
 
 /**
  * @param {Date} next
@@ -122,6 +133,7 @@ function selectCalendarDay(dateKey) {
     dayCell.setAttribute("aria-pressed", String(isSelected));
   });
   renderCalendarDetail();
+  if (onDaySelected) onDaySelected(dateKey);
 }
 
 /**

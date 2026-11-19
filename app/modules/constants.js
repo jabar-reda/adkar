@@ -7,10 +7,15 @@ if (!CONFIG) throw new Error("config.js must load before app.js");
 
 export const STORAGE_KEY = CONFIG.storageKeys.state;
 export const SETTINGS_KEY = CONFIG.storageKeys.settings;
+export const APP_META = CONFIG.appMeta;
 
 // نحتفظ بآخر 60 يوماً من التقدم فقط حتى لا يتضخم التخزين بلا نهاية.
 export const KEEP_DAYS = 60;
-export const STATE_SCHEMA_VERSION = 2;
+// الإصدار 3: ترحيل الأيام القديمة التي اكتمل مساؤها قبل إضافة سورة الملك.
+export const STATE_SCHEMA_VERSION = 3;
+// معرّف سورة الملك: أُضيفت لاحقاً لأذكار المساء، فتُعامل الأيام القديمة
+// المكتملة قبل إضافتها كأنها قُرئت فيها.
+export const MULK_ITEM_ID = "surah-al-mulk";
 // حد حجم ملف النسخة الاحتياطية المقبول عند الاستيراد (2 ميغابايت).
 export const MAX_BACKUP_BYTES = 2 * 1024 * 1024;
 // نذكّر المستخدم بتصدير نسخة احتياطية كل أسبوعين.
