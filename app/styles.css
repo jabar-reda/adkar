@@ -332,6 +332,36 @@ body::before {
   margin-top: 1.5rem;
 }
 
+/* شريط اليوم المعروض: يظهر عند اختيار يوم سابق من التقويم */
+.viewing-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.9rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+}
+
+.viewing-note[hidden] {
+  display: none;
+}
+
+.viewing-note p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  line-height: 1.8;
+}
+
+.viewing-note .ghost-button {
+  flex-shrink: 0;
+  background: var(--surface);
+}
+
 .period-head {
   display: flex;
   align-items: flex-end;
@@ -901,6 +931,101 @@ body::before {
   color: var(--accent-ink);
 }
 
+/* تذييل الهوية: شارة المطوّر، ورابطا الأيقونات، وسطر الإصدار والحقوق */
+.colophon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.85rem;
+  margin-top: 2.25rem;
+  padding: 1.4rem 0.5rem 0.25rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 0.76rem;
+  line-height: 1.8;
+  text-align: center;
+}
+
+.colophon p {
+  margin: 0;
+}
+
+.colophon-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.colophon-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.colophon-link:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.colophon-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.colophon-icon {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex-shrink: 0;
+  fill: currentColor;
+}
+
+.colophon-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.colophon-meta #app-version,
+.colophon-meta #app-year {
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+
+.colophon-sep {
+  opacity: 0.45;
+}
+
+.colophon-copy {
+  font-variant-numeric: tabular-nums;
+}
+
+.colophon-author {
+  font-size: 0.72rem;
+}
+
+.colophon-author span {
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+
 /* ===== 9. الوقت المتبقي والانتقال والإعدادات والتراجع ===== */
 .time-left {
   margin: 0.3rem 0 0;
@@ -1287,6 +1412,68 @@ body.is-dialog-open {
   margin-top: 0.75rem;
 }
 
+/* ===== 10b. نافذة النسخة الاحتياطية ===== */
+.backup-dialog {
+  width: min(100% - 2rem, 32rem);
+  max-height: calc(100vh - 2rem);
+  padding: 1.15rem;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--ink);
+  overflow-y: auto;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+.backup-dialog::backdrop {
+  background: rgba(8, 12, 18, 0.65);
+  backdrop-filter: blur(3px);
+}
+
+.backup-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.backup-dialog-head h2 {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 1.15rem;
+  line-height: 1.5;
+}
+
+.backup-dialog-message {
+  margin: 0.6rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  line-height: 1.9;
+}
+
+.backup-dialog-text {
+  display: block;
+  width: 100%;
+  margin-top: 0.75rem;
+  padding: 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.backup-dialog-text[hidden] {
+  display: none;
+}
+
+.backup-dialog .backup-actions {
+  margin-top: 0.9rem;
+}
+
 /* ===== 11. أدوات مساعدة ===== */
 /* نص موجّه لقارئ الشاشة فقط: مخفي بصرياً بكل الطرق الممكنة دون
    أن يختفي عن الصوت (clip بدل display:none) */
@@ -1380,6 +1567,8 @@ body.is-dialog-open {
   .settings,
   .undo-bar,
   .counter-dialog,
+  .backup-dialog,
+  .viewing-note,
   .site-footer .reset,
   .insights {
     display: none !important;

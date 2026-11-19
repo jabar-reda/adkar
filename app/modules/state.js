@@ -2,11 +2,18 @@
 // الحالة المعيشة للتقدم والتخزين: التحميل، التطهير، الحفظ، الدمج بين
 // التبويبات، والوصول إلى أيام اليوم. كل قراءة/كتابة للتقدم تمر من هنا.
 
-import { KEEP_DAYS, SECTIONS, STATE_SCHEMA_VERSION, STORAGE_KEY } from "./constants.js";
+import {
+  KEEP_DAYS,
+  MULK_ITEM_ID,
+  SECTIONS,
+  STATE_SCHEMA_VERSION,
+  STORAGE_KEY,
+} from "./constants.js";
 import { announce, elements } from "./dom.js";
 import {
   getBestStreak,
   isDayComplete,
+  isItemComplete,
   isSanitizedDayComplete,
   mergeStats,
   sanitizeStats,
@@ -97,6 +104,30 @@ function sanitizeDayRecord(source) {
     });
   });
   return day;
+}
+
+// ترحيل لمرة واحدة للبيانات القادمة من schemaVersion 2 أو أقدم: سورة الملك
+// أُضيفت لاحقاً إلى أذكار المساء، فالأيام التي اكتمل كل مسائها القديم لا تحتوي
+// إدخالاً لها. نعدّها مقروءة كي لا تنكسر أيام المستخدم القديمة أو سلسلته.
+// إن وُجد إدخال للملك (ولو بعدّ صفر) لا نلمسه، فإعادة تعيينه يدوياً تبقى محفوظة.
+/**
+ * @param {Record<string, DayRecord>} days
+ * @returns {void}
+ */
+export function markLegacyMulkDays(days) {
+  const mulkItem = SECTIONS.evening.items.find((item) => item.id === MULK_ITEM_ID);
+  if (!mulkItem) return;
+  const mulkKey = itemKey("evening", mulkItem);
+
+  Object.values(days).forEach((day) => {
+    const record = day && day.evening;
+    if (!record || record[mulkKey]) return;
+    const restComplete = SECTIONS.evening.items.every((item) =>
+      item.id === MULK_ITEM_ID ||
+      isItemComplete(item, record[itemKey("evening", item)])
+    );
+    if (restComplete) record[mulkKey] = { count: mulkItem.count, done: true };
+  });
 }
 
 /**
@@ -210,7 +241,9 @@ function parseLoadedState(raw) {
       storageBlocked = true;
       return emptyState();
     }
-    return { schemaVersion: STATE_SCHEMA_VERSION, days: sanitizeDays(parsed.days), stats: sanitizeStats(parsed.stats) };
+    const days = sanitizeDays(parsed.days);
+    if (Number(parsed.schemaVersion || 1) < STATE_SCHEMA_VERSION) markLegacyMulkDays(days);
+    return { schemaVersion: STATE_SCHEMA_VERSION, days, stats: sanitizeStats(parsed.stats) };
   } catch (error) {
     storageLoadIssue = error && error.name === "SecurityError"
       ? "المتصفح منع الوصول إلى التخزين المحلي. لن نحاول الكتابة حتى يصبح التخزين متاحاً."
@@ -355,29 +388,30 @@ export function getDay(dateKey) {
 }
 
 /**
- * إدخال ذكر واحد في يوم اليوم.
+ * إدخال ذكر واحد في يوم محدد (اليوم الحالي افتراضياً).
  * @param {string} period
  * @param {string} entryKey
+ * @param {string} [dateKey]
  * @returns {DayEntry | null}
  */
-export function getEntry(period, entryKey) {
-  const day = state.days[dayKey()];
+export function getEntry(period, entryKey, dateKey = dayKey()) {
+  const day = state.days[dateKey];
   const record = day && day[period];
   return (record && record[entryKey]) || null;
 }
 
-// يكتب إدخال ذكر معين في يوم اليوم ثم يحفظ فوراً (حتى لا يضيع
+// يكتب إدخال ذكر معين في اليوم المحدد ثم يحفظ فوراً (حتى لا يضيع
 // التقدم عند إغلاق الصفحة قبل أي حفظ لاحق).
 /**
  * @param {string} period
  * @param {string} entryKey
  * @param {DayEntry} value
+ * @param {string} [dateKey]
  */
-export function setEntry(period, entryKey, value) {
-  const today = dayKey();
-  const day = getDay(today);
+export function setEntry(period, entryKey, value, dateKey = dayKey()) {
+  const day = getDay(dateKey);
   day[period][entryKey] = value;
-  state.days[today] = day;
+  state.days[dateKey] = day;
   pruneDays();
   saveState();
 }
@@ -391,7 +425,9 @@ export function parseStateSnapshot(raw) {
   try {
     const parsed = JSON.parse(raw);
     if (!hasValidStoredShape(parsed) || Number(parsed.schemaVersion || 1) > STATE_SCHEMA_VERSION) return null;
-    return { schemaVersion: STATE_SCHEMA_VERSION, days: sanitizeDays(parsed.days), stats: sanitizeStats(parsed.stats) };
+    const days = sanitizeDays(parsed.days);
+    if (Number(parsed.schemaVersion || 1) < STATE_SCHEMA_VERSION) markLegacyMulkDays(days);
+    return { schemaVersion: STATE_SCHEMA_VERSION, days, stats: sanitizeStats(parsed.stats) };
   } catch (error) {
     return null;
   }

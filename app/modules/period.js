@@ -11,14 +11,15 @@ import { renderInsights } from "./insights.js";
 import { countAllSections, countCompleted } from "./progress.js";
 import { applyTheme } from "./settings.js";
 import { state } from "./state.js";
-import { updateTimeLeft } from "./time.js";
+import { formatBackupDate, formatWeekday, updateTimeLeft } from "./time.js";
 import { hideUndo } from "./undo.js";
 import {
   getActivePeriod,
   itemControllers,
   setActivePeriod,
 } from "./ui-state.js";
-import { dayKey, toArabicNumber } from "./utils.js";
+import { getViewedDayKey, isViewingToday } from "./view-day.js";
+import { parseDateKey, toArabicNumber } from "./utils.js";
 
 let previousDone = null; // عدد المكتمل قبل آخر تحديث، لكشف «اكتمل الآن»
 let previousSupplementDone = null;
@@ -36,6 +37,7 @@ export function renderPeriod(period) {
   applyTheme();
   hideUndo();
 
+  const dateKey = getViewedDayKey();
   const section = SECTIONS[period];
   elements.title.textContent = section.name;
   elements.hint.textContent = section.hint;
@@ -43,7 +45,7 @@ export function renderPeriod(period) {
   itemControllers.clear();
   elements.list.replaceChildren(
     ...section.items.map((item, index) =>
-      createItem(period, item, index, updateProgress)
+      createItem(period, item, index, updateProgress, dateKey)
     )
   );
 
@@ -55,7 +57,7 @@ export function renderPeriod(period) {
     elements.supplementNote.textContent = supplement.note;
     elements.supplementList.replaceChildren(
       ...SECTIONS[supplement.period].items.map((item, index) =>
-        createItem(supplement.period, item, index, updateProgress)
+        createItem(supplement.period, item, index, updateProgress, dateKey)
       )
     );
   }
@@ -66,11 +68,34 @@ export function renderPeriod(period) {
     tab.tabIndex = selected ? 0 : -1;
   });
 
-  previousDone = countCompleted(state, period);
-  previousSupplementDone = supplement ? countCompleted(state, supplement.period) : null;
+  renderViewingNote(dateKey);
+  elements.reset.textContent = isViewingToday()
+    ? "إعادة تعيين اليوم"
+    : "إعادة تعيين هذا اليوم";
+
+  previousDone = countCompleted(state, period, dateKey);
+  previousSupplementDone = supplement ? countCompleted(state, supplement.period, dateKey) : null;
   insightsSignature = "";
   updateProgress();
   updateTimeLeft();
+}
+
+// شريط يوضح أن الأعلى يعرض يوماً سابقاً مختاراً من التقويم.
+/**
+ * @param {string} dateKey
+ * @returns {void}
+ */
+function renderViewingNote(dateKey) {
+  const past = !isViewingToday();
+  elements.viewingNote.hidden = !past;
+  if (!past) {
+    elements.viewingNoteText.textContent = "";
+    return;
+  }
+  const date = parseDateKey(dateKey);
+  elements.viewingNoteText.textContent =
+    `تعرض الآن أذكار ${formatWeekday(date)} ${formatBackupDate(dateKey)} — ` +
+    "أي تعديل هنا يُحفظ لذلك اليوم.";
 }
 
 // عنوان تبويب المتصفح يعرض المتبقي: مؤشر مختصر يظهر أثناء التنقل
@@ -122,7 +147,7 @@ export function updateProgress() {
   const section = SECTIONS[getActivePeriod()];
   const total = section.items.length;
   // نحسب عدّادات الأقسام مرة واحدة، لأن كل استدعاء لـ countCompleted يمر على كل الأذكار.
-  const counts = countAllSections(state, dayKey());
+  const counts = countAllSections(state, getViewedDayKey());
   const done = counts[getActivePeriod()];
   // «اكتمل الآن» = صار العدد المساوي للإجمالي وكان أقل منه في التحديث السابق؛
   // هذا الفرق هو ما يشغّل الاحتفال مرة واحدة لا عند كل تحديث.

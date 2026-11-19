@@ -28,6 +28,7 @@ import {
 } from "./settings.js";
 import {
   emptyDay,
+  markLegacyMulkDays,
   pruneDays,
   sanitizeDays,
   saveState,
@@ -37,12 +38,8 @@ import {
 } from "./state.js";
 import { formatBackupDate } from "./time.js";
 import { getActivePeriod } from "./ui-state.js";
-import {
-  csvCell,
-  dayKey,
-  itemKey,
-  toArabicNumber,
-} from "./utils.js";
+import { resetViewedDayKey } from "./view-day.js";
+import { csvCell, dayKey, itemKey, toArabicNumber } from "./utils.js";
 
 // ملف الاستيراد بانتظار اختيار «دمج» أو «استبدال».
 /** @type {BackupPreview | null} */
@@ -129,7 +126,8 @@ function validateBackup(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return { ok: false, reason: "بنية الملف غير صالحة." };
   }
-  if (Number(raw.schemaVersion || raw.version || 1) > STATE_SCHEMA_VERSION) {
+  const fileVersion = Number(raw.schemaVersion || raw.version || 1);
+  if (fileVersion > STATE_SCHEMA_VERSION) {
     return { ok: false, reason: "هذه النسخة الاحتياطية أحدث من إصدار التطبيق الحالي." };
   }
   if (!raw.days || typeof raw.days !== "object" || Array.isArray(raw.days)) {
@@ -137,6 +135,8 @@ function validateBackup(raw) {
   }
 
   const days = sanitizeDays(raw.days);
+  // نسخة صادرة قبل إضافة سورة الملك: أيامها المكتملة مساءً تُعدّ قارئة لها.
+  if (fileVersion < STATE_SCHEMA_VERSION) markLegacyMulkDays(days);
   const dayCount = Object.keys(days).length;
 
   return {
@@ -169,6 +169,74 @@ function downloadFile(content, filename, type) {
   setTimeout(() => URL.revokeObjectURL(url), DOWNLOAD_URL_TTL_MS);
 }
 
+// نافذة نتيجة النسخ/الاستيراد: تعرض تأكيداً واضحاً، ونص JSON قابلاً للنسخ
+// على الأجهزة التي لا يعمل فيها التنزيل المباشر (تطبيق أندرويد).
+/**
+ * @param {{ title: string, message: string, text?: string, editable?: boolean, download?: boolean, verify?: boolean }} options
+ * @returns {void}
+ */
+function openBackupDialog(options) {
+  const text = options.text || "";
+  elements.backupDialogTitle.textContent = options.title;
+  elements.backupDialogMessage.textContent = options.message;
+  elements.backupDialogText.value = text;
+  elements.backupDialogText.readOnly = !options.editable;
+  elements.backupDialogText.hidden = !text && !options.editable;
+  elements.backupCopy.hidden = !text || Boolean(options.editable);
+  elements.backupDownload.hidden = !options.download;
+  elements.backupVerify.hidden = !options.verify;
+  elements.backupCopy.textContent = "نسخ النص";
+  document.body.classList.add("is-dialog-open");
+
+  if (typeof elements.backupDialog.showModal === "function") {
+    elements.backupDialog.showModal();
+  } else {
+    elements.backupDialog.setAttribute("open", "");
+  }
+}
+
+function handleBackupDialogClosed() {
+  document.body.classList.remove("is-dialog-open");
+}
+
+export function closeBackupDialog() {
+  const dialog = elements.backupDialog;
+  if (!dialog) return;
+  if (typeof dialog.close === "function") {
+    dialog.close();
+    return;
+  }
+  dialog.removeAttribute("open");
+  handleBackupDialogClosed();
+}
+
+// النسخ إلى الحافظة قد يكون ممنوعاً في بعض السياقات؛ عندها نحدد النص
+// ليتمكن المستخدم من نسخه بنفسه.
+function selectBackupText() {
+  elements.backupDialogText.focus();
+  if (typeof elements.backupDialogText.select === "function") {
+    elements.backupDialogText.select();
+  }
+}
+
+async function copyBackupText() {
+  const text = elements.backupDialogText.value;
+  try {
+    if (typeof navigator !== "undefined" && navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      await navigator.clipboard.writeText(text);
+      elements.backupCopy.textContent = "تم النسخ ✓";
+      return;
+    }
+    // بديل WebView: تحديد النص ثم أمر النسخ؛ إن رفض المتصفح نطلب النسخ اليدوي.
+    selectBackupText();
+    const copied = document.execCommand("copy");
+    elements.backupCopy.textContent = copied ? "تم النسخ ✓" : "حدّد النص وانسخه";
+  } catch (error) {
+    selectBackupText();
+    elements.backupCopy.textContent = "حدّد النص وانسخه";
+  }
+}
+
 export function exportBackup() {
   settings.lastExportAt = new Date().toISOString();
   saveSettings();
@@ -184,18 +252,27 @@ export function exportBackup() {
     settings: { ...settings },
   };
 
-  downloadFile(
-    JSON.stringify(payload, null, 2),
-    `adkar-${dayKey()}.json`,
-    "application/json"
-  );
+  const json = JSON.stringify(payload, null, 2);
+  // داخل تطبيق أندرويد لا يعمل رابط التنزيل في WebView؛ نعرض النص للنسخ.
+  const canDownload = !(typeof ADKAR_STORAGE !== "undefined" && ADKAR_STORAGE.isNative);
+  if (canDownload) {
+    downloadFile(json, `adkar-${dayKey()}.json`, "application/json");
+  }
 
   const dayCount = Object.keys(state.days).length;
-  setBackupStatus(
-    dayCount === 0
-      ? "تم تصدير نسخة فارغة."
-      : `تم تصدير نسخة تحتوي ${formatDayTotal(dayCount)}.`
-  );
+  const status = dayCount === 0
+    ? "تم تصدير نسخة فارغة."
+    : `تم تصدير نسخة تحتوي ${formatDayTotal(dayCount)}.`;
+  setBackupStatus(status);
+
+  openBackupDialog({
+    title: "تم تصدير النسخة",
+    message: canDownload
+      ? `${status} احفظ الملف في مكان آمن.`
+      : `${status} التنزيل المباشر غير متاح داخل التطبيق؛ استخدم «نسخ النص» واحفظه في ملف.`,
+    text: json,
+    download: canDownload,
+  });
 }
 
 export function exportCsv() {
@@ -237,8 +314,82 @@ export function exportCsv() {
   const csv =
     "\uFEFF" + rows.map((row) => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
 
+  // داخل تطبيق أندرويد لا يعمل تنزيل blob؛ نعرض النص للنسخ كحال نسخة JSON.
+  const canDownload = !(typeof ADKAR_STORAGE !== "undefined" && ADKAR_STORAGE.isNative);
+  if (!canDownload) {
+    setBackupStatus(`تم تجهيز ${formatDayTotal(dateKeys.length)} بتنسيق CSV.`);
+    openBackupDialog({
+      title: "تم تصدير CSV",
+      message:
+        "التنزيل المباشر غير متاح داخل التطبيق؛ استخدم «نسخ النص» واحفظه في ملف بامتداد .csv.",
+      text: csv,
+    });
+    return;
+  }
+
   downloadFile(csv, `adkar-${dayKey()}.csv`, "text/csv;charset=utf-8");
   setBackupStatus(`تم تصدير ${formatDayTotal(dateKeys.length)} إلى CSV.`);
+}
+
+/**
+ * @param {string} message
+ * @returns {void}
+ */
+function failImport(message) {
+  pendingImport = null;
+  elements.importConfirm.hidden = true;
+  elements.importFile.value = "";
+  setBackupStatus(message, true);
+}
+
+// مسار مشترك بين اختيار ملف ولصق نص: كلاهما يمر بنفس التحقق ثم المعاينة.
+/**
+ * @param {string} text
+ * @returns {void}
+ */
+export function handleImportText(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    failImport("الملف ليس ملف JSON صالحاً.");
+    return;
+  }
+
+  const result = validateBackup(parsed);
+  if (result.ok === false) {
+    failImport(result.reason);
+    return;
+  }
+
+  pendingImport = result;
+  elements.importSummary.textContent = result.dayCount === 0
+    ? "الملف لا يحتوي أيام مسجلة. «دمج» لن يغيّر شيئاً، و«استبدال» سيمسح كل تقدمك الحالي."
+    : `الملف يحتوي ${formatDayTotal(result.dayCount)}، آخرها ${formatBackupDate(
+        result.lastDate
+      )}. «دمج» يحتفظ بالعدد الأكبر لكل ذكر ويبقي إعداداتك، و«استبدال» يمسح كل ما لديك.`;
+  elements.importConfirm.hidden = false;
+  elements.importFile.value = "";
+  setBackupStatus("");
+  if (typeof elements.importConfirm.scrollIntoView === "function") {
+    elements.importConfirm.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+}
+
+// قراءة نص الملف: File.text حديثة ولا توجد في WebView قديم داخل أندرويد،
+// فنعود إلى FileReader المتوفر في كل الإصدارات.
+/**
+ * @param {File} file
+ * @returns {Promise<string>}
+ */
+function readFileText(file) {
+  if (typeof file.text === "function") return file.text();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => reject(reader.error || new Error("read failed"));
+    reader.readAsText(file);
+  });
 }
 
 /**
@@ -254,34 +405,19 @@ export function handleImportFile(file) {
     return;
   }
 
-  file
-    .text()
-    .then((text) => {
-      let parsed;
-      try {
-        parsed = JSON.parse(text);
-      } catch (error) {
-        throw new Error("الملف ليس ملف JSON صالحاً.");
-      }
+  readFileText(file)
+    .then(handleImportText)
+    .catch(() => failImport("تعذّر قراءة الملف."));
+}
 
-      const result = validateBackup(parsed);
-      if (result.ok === false) throw new Error(result.reason);
-
-      pendingImport = result;
-      elements.importSummary.textContent = result.dayCount === 0
-        ? "الملف لا يحتوي أيام مسجلة. «دمج» لن يغيّر شيئاً، و«استبدال» سيمسح كل تقدمك الحالي."
-        : `الملف يحتوي ${formatDayTotal(result.dayCount)}، آخرها ${formatBackupDate(
-            result.lastDate
-          )}. «دمج» يحتفظ بالعدد الأكبر لكل ذكر ويبقي إعداداتك، و«استبدال» يمسح كل ما لديك.`;
-      elements.importConfirm.hidden = false;
-      setBackupStatus("");
-    })
-    .catch((error) => {
-      pendingImport = null;
-      elements.importConfirm.hidden = true;
-      elements.importFile.value = "";
-      setBackupStatus(error.message || "تعذّر قراءة الملف.", true);
-    });
+// بديل اختيار الملف على أندرويد: لصق نص النسخة مباشرة في نافذة.
+export function openImportPasteDialog() {
+  openBackupDialog({
+    title: "استيراد نسخة",
+    message: "الصق محتوى ملف النسخة (JSON) كاملاً، ثم اضغط «فحص النسخة».",
+    editable: true,
+    verify: true,
+  });
 }
 
 // قاعدة الدمج لذكر واحد: لا ينخفض أي عدد أبداً — نأخذ الأكبر بين
@@ -353,6 +489,7 @@ function finishImport() {
   pendingImport = null;
   elements.importConfirm.hidden = true;
   elements.importFile.value = "";
+  resetViewedDayKey();
   resetCalendarToCurrentMonth();
   renderPeriod(getActivePeriod());
   updateBackupReminder();
@@ -386,12 +523,12 @@ export function applyImport() {
   }
 
   finishImport();
-  setBackupStatus(
-    imported.dayCount === 0
-      ? "تم استبدال التقدم بنسخة لا تحتوي أياماً."
-      : `تم استيراد ${formatDayTotal(imported.dayCount)}.`
-  );
+  const status = imported.dayCount === 0
+    ? "تم استبدال التقدم بنسخة لا تحتوي أياماً."
+    : `تم استيراد ${formatDayTotal(imported.dayCount)}.`;
+  setBackupStatus(status);
   announce("تم استيراد النسخة الاحتياطية");
+  openBackupDialog({ title: "تم استيراد النسخة", message: status });
 }
 
 export function applyMerge() {
@@ -411,10 +548,26 @@ export function applyMerge() {
   saveState();
 
   finishImport();
-  setBackupStatus(
-    imported.dayCount === 0
-      ? "تم دمج النسخة، ولم تحتوِ أياماً فلم يُضف شيء."
-      : `تم دمج ${formatDayTotal(imported.dayCount)} من الملف، ${describeMergedDays(addedDays)}.`
-  );
+  const status = imported.dayCount === 0
+    ? "تم دمج النسخة، ولم تحتوِ أياماً فلم يُضف شيء."
+    : `تم دمج ${formatDayTotal(imported.dayCount)} من الملف، ${describeMergedDays(addedDays)}.`;
+  setBackupStatus(status);
   announce("تم دمج النسخة الاحتياطية");
+  openBackupDialog({ title: "تم دمج النسخة", message: status });
 }
+
+/* أزرار نافذة النسخة: الإغلاق، نسخ النص، تنزيله، وفحص النص الملصوق. */
+elements.backupClose.addEventListener("click", closeBackupDialog);
+elements.backupCopy.addEventListener("click", copyBackupText);
+elements.backupDownload.addEventListener("click", () => {
+  downloadFile(elements.backupDialogText.value, `adkar-${dayKey()}.json`, "application/json");
+});
+elements.backupVerify.addEventListener("click", () => {
+  const text = elements.backupDialogText.value;
+  closeBackupDialog();
+  handleImportText(text);
+});
+elements.backupDialog.addEventListener("click", (event) => {
+  if (event.target === elements.backupDialog) closeBackupDialog();
+});
+elements.backupDialog.addEventListener("close", handleBackupDialogClosed);
