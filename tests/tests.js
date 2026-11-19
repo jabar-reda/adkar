@@ -104,7 +104,7 @@ function fail(message) {
   else fail("app.js must detect the platform through ADKAR_STORAGE.isNative only");
 
   const allItemIds = ALL_ITEMS.map((item) => item.id);
-  if (allItemIds.length === 49 && new Set(allItemIds).size === 37) pass("all 37 unique dhikr IDs across 49 list entries");
+  if (allItemIds.length === 50 && new Set(allItemIds).size === 38) pass("all 38 unique dhikr IDs across 50 list entries");
   else fail(`dhikr explicit IDs: ${allItemIds.length} entries, ${new Set(allItemIds).size} unique`);
 
   const missingCounts = ALL_ITEMS.filter((item) => !Number.isInteger(item.count) || item.count < 0);
@@ -884,7 +884,7 @@ check(
 
 /* تبديل التبويبات */
 tabEvening.click();
-check("evening items = 18", list.children.length === 18, String(list.children.length));
+check("evening items = 19", list.children.length === 19, String(list.children.length));
 check(
   "countdown evening starts in 5 hours",
   timeLeft.textContent === "يبدأ وقت أذكار المساء بعد ٥ ساعات",
@@ -1579,8 +1579,8 @@ async function runAsyncTests() {
     String(supplementList.children.length)
   );
   check(
-    "evening tab still counts 18 base adhkar",
-    tabEvening.querySelector(".tab-count").textContent === "١٨ من ١٨",
+    "evening tab still counts 19 base adhkar",
+    tabEvening.querySelector(".tab-count").textContent === "١٩ من ١٩",
     tabEvening.querySelector(".tab-count").textContent
   );
   check(
