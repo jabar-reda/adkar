@@ -941,7 +941,7 @@ check(
 );
 check(
   "footer shows the app version in Arabic digits",
-  byId.get("app-version").textContent === "١.١.٢",
+  byId.get("app-version").textContent === "١.١.٣",
   byId.get("app-version").textContent
 );
 check(

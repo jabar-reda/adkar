@@ -8,7 +8,7 @@
     // بيانات التذييل: رقم الإصدار المعروض (يطابق package.json)، والمطور،
     // ورابطا GitHub وInstagram. اسم إنستغرام يُقبل بعلامة @ أو بدونها.
     appMeta: {
-      version: "1.1.2",
+      version: "1.1.3",
       author: "jaba reda",
       github: "https://github.com/jabar-reda/adkar",
       instagram: "jbr.rda",

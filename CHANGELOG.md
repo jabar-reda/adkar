@@ -6,6 +6,12 @@
 
 ## [غير منشور]
 
+## [1.1.3] - 2026-11-27
+
+### إصلاح
+
+- منع المتصفح/Android WebView من فرض الوضع الداكن على الثيم الفاتح بإضافة `<meta name="color-scheme" content="light dark">` واستخدام `color-scheme: only light / only dark`، مع تحديث `theme-color` حسب الثيم النشط.
+
 ### وثائق
 
 - تحديث `README.md` و`CONTRIBUTING.md` ليطابقا البنية الحالية للتطبيق (وحدات `app/modules/`، طبقة `app/storage.js`، ودقة أوصاف التخزين والاستيراد).
@@ -96,7 +102,8 @@
 - أذكار النوم والاستيقاظ، وأيقونات SVG وICO.
 - خطوط عربية محلية، ودعم RTL، وتحسين اللمس على الجوال.
 
-[غير منشور]: https://github.com/jabar-reda/adkar/compare/v1.1.2...HEAD
+[غير منشور]: https://github.com/jabar-reda/adkar/compare/v1.1.3...HEAD
+[1.1.3]: https://github.com/jabar-reda/adkar/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/jabar-reda/adkar/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/jabar-reda/adkar/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/jabar-reda/adkar/compare/v1.0.4...v1.1.0
