@@ -175,6 +175,12 @@ function fail(message) {
   if (/<script>[\s\S]*?<\/script>/.test(html)) fail("index.html still contains an inline script");
   else pass("index.html has no inline script");
 
+  if (html.includes('<meta name="color-scheme" content="light dark">')) pass("index.html declares supported color schemes");
+  else fail("index.html missing color-scheme meta");
+
+  if (css.includes("color-scheme: only light;") && css.includes("color-scheme: only dark;")) pass("themes opt out of forced darkening");
+  else fail("themes must use only light / only dark to prevent forced darkening");
+
   [
     ['<link rel="stylesheet" href="app/styles.css">', "app/styles.css"],
     ['<script src="app/config.js"></script>', "app/config.js"],

@@ -30,5 +30,11 @@
   // الافتراضي، لأن CSS يقرأ هذه الخاصيتين عند أول رسم.
   document.documentElement.dataset.period = period;
   document.documentElement.dataset.fontSize = fontSize;
+
+  // لون شريط المتصفح/النظام يتبع الثيم النشط، ويمنع وميض لون خاطئ.
+  var themeColor = document.querySelector('meta[name="theme-color"]');
+  if (themeColor) {
+    themeColor.setAttribute("content", period === "evening" ? "#0f1523" : "#0d6a4d");
+  }
 })();
 

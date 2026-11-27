@@ -72,6 +72,11 @@ let lastVisualPeriod = null;
 // يترجم الثيم المختار إلى لون فعلي: ثيم يدوي يلتزم قيمته، و"time"
 // يتبع الساعة، و"auto" يتبع القسم المعروض حالياً. قيمة lastVisualPeriod
 // تمنع لمس DOM في كل استدعاء إذا لم يتغير اللون.
+const THEME_COLORS = {
+  morning: "#0d6a4d",
+  evening: "#0f1523",
+};
+
 export function applyTheme() {
   let visualPeriod;
   if (settings.theme === "morning" || settings.theme === "evening") visualPeriod = settings.theme;
@@ -80,6 +85,8 @@ export function applyTheme() {
   if (visualPeriod === lastVisualPeriod) return;
   lastVisualPeriod = visualPeriod;
   document.documentElement.dataset.period = visualPeriod;
+  const themeColor = document.querySelector('meta[name="theme-color"]');
+  if (themeColor) themeColor.setAttribute("content", THEME_COLORS[visualPeriod] || THEME_COLORS.morning);
 }
 
 export function refreshClockTheme() {
